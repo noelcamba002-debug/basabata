@@ -1,0 +1,1393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<title>BasaBata — Reading Intervention</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2e7d32">
+<style>
+:root{--bg:#fdf6e3;--card:#fff;--text:#2b2b2b;--primary:#2e7d32;--accent:#1565c0;--ok:#2e7d32;--close:#f9a825;--miss:#c62828;--hl:#ffe082;--radius:14px;--font-scale:1}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:system-ui,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text);font-size:calc(18px * var(--font-scale));line-height:1.55;padding-bottom:80px}
+body.dyslexic{font-family:"OpenDyslexic","Comic Sans MS",sans-serif}
+body.high-contrast{--bg:#000;--card:#111;--text:#fff;--hl:#ff0}
+.topbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px 14px;background:var(--card);position:sticky;top:0;z-index:20;box-shadow:0 2px 6px rgba(0,0,0,.08)}
+.topbar h1{font-size:1rem;margin:0 12px 0 0;color:var(--primary)}
+.btn{border:none;border-radius:var(--radius);padding:12px 16px;font-size:1rem;font-weight:600;background:var(--primary);color:#fff;cursor:pointer;min-height:48px;min-width:48px}
+.btn.secondary{background:var(--accent)}
+.btn.ghost{background:transparent;color:var(--text);border:2px solid #ccc}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.zoom-group{display:inline-flex;gap:4px;margin-left:auto}
+.zoom-group .btn{padding:8px 12px;font-size:1.1rem}
+main{max-width:780px;margin:0 auto;padding:16px}
+.card{background:var(--card);border-radius:var(--radius);padding:18px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,.06)}
+#passageText{font-size:calc(1.35rem * var(--font-scale));line-height:1.85}
+#passageText .word{border-radius:6px;transition:background .08s;padding:0 2px}
+#passageText .word.hl{background:var(--hl);font-weight:700}
+#passageText .word.ok{background:#c8e6c9}
+#passageText .word.close{background:#fff59d}
+#passageText .word.miss{background:#ffcdd2;text-decoration:underline wavy}
+.controls{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.slider-row{display:flex;align-items:center;gap:10px;margin-top:10px}
+input[type=range]{flex:1;min-height:44px}
+select{font-size:1rem;padding:10px;border-radius:8px;min-height:44px}
+.q{margin:18px 0}
+.q .qtype{font-size:.75rem;text-transform:uppercase;color:var(--accent);letter-spacing:.5px}
+.q .qtext{font-weight:600;margin:4px 0 10px}
+.opt{display:block;width:100%;text-align:left;padding:14px;margin:8px 0;border-radius:10px;border:2px solid #ddd;background:#fff;cursor:pointer;font-size:1rem;min-height:48px}
+.opt.selected{border-color:var(--accent);background:#e3f2fd}
+.opt.correct{border-color:var(--ok);background:#e8f5e9}
+.opt.wrong{border-color:var(--miss);background:#ffebee}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{background:#f1f8e9;border-radius:10px;padding:12px;text-align:center}
+.stat .val{font-size:1.6rem;font-weight:700;color:var(--primary)}
+.stat .lab{font-size:.8rem;color:#555}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th,td{border-bottom:1px solid #eee;padding:8px 6px;text-align:left}
+th{background:#f5f5f5}
+.hidden{display:none !important}
+@media (max-width:480px){main{padding:10px}.topbar h1{font-size:.9rem}}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>📖 BasaBata</h1>
+  <button class="btn ghost" id="btnLang" title="Toggle language">EN</button>
+  <button class="btn ghost" id="btnDash" title="Teacher dashboard">📊</button>
+  <button class="btn ghost" id="btnDys" title="Dyslexia font">Aa</button>
+  <button class="btn ghost" id="btnHC" title="High contrast">◐</button>
+  <div class="zoom-group">
+    <button class="btn ghost" id="zoomOut" aria-label="Zoom out">A−</button>
+    <button class="btn ghost" id="zoomReset" aria-label="Reset zoom">A</button>
+    <button class="btn ghost" id="zoomIn" aria-label="Zoom in">A+</button>
+  </div>
+</header>
+
+<main>
+  <section id="learnerView">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap">
+        <div>
+          <div style="font-size:.8rem;color:#888" id="stageLabel">Stage 1 · English</div>
+          <h2 id="titleLabel" style="margin:4px 0 0">—</h2>
+        </div>
+        <select id="passageSelect" aria-label="Choose passage"></select>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="passageText"></div>
+      <div class="controls">
+        <button class="btn" id="btnPlay">🔊 Play Model Read</button>
+        <button class="btn ghost" id="btnStop">⏹ Stop</button>
+        <button class="btn secondary" id="btnRecord">🎤 Read Now</button>
+      </div>
+      <div class="slider-row">
+        <span>🐢</span>
+        <input type="range" id="rateSlider" min="0.6" max="1.3" step="0.05" value="0.9">
+        <span>🐇</span>
+      </div>
+      <div class="slider-row">
+        <label for="voiceSelect">Voice:</label>
+        <select id="voiceSelect" style="flex:1"></select>
+      </div>
+      <p id="status" style="font-size:.9rem;color:#666;margin:10px 0 0">Tap "Play Model Read" to hear the passage.</p>
+    </div>
+
+    <div class="card hidden" id="statsCard">
+      <h3 style="margin-top:0">Session Results</h3>
+      <div class="stats">
+        <div class="stat"><div class="val" id="statWCPM">—</div><div class="lab">WCPM</div></div>
+        <div class="stat"><div class="val" id="statAcc">—</div><div class="lab">Accuracy %</div></div>
+        <div class="stat"><div class="val" id="statTime">—</div><div class="lab">Time (s)</div></div>
+        <div class="stat"><div class="val" id="statComp">—</div><div class="lab">Comprehension</div></div>
+      </div>
+      <p id="transcript" style="font-size:.85rem;color:#555;margin-top:12px"></p>
+      <button class="btn ghost" id="btnRetry">🔄 Try Again (Warm Read)</button>
+    </div>
+
+    <div class="card" id="quizCard">
+      <h3 style="margin-top:0">Comprehension Check</h3>
+      <div id="quizBody"></div>
+      <button class="btn" id="btnSubmitQuiz" style="margin-top:12px">Submit Answers</button>
+      <div id="quizResult" style="margin-top:12px"></div>
+    </div>
+  </section>
+
+  <section id="dashView" class="hidden">
+    <div class="card">
+      <h2 style="margin-top:0">Teacher Dashboard</h2>
+      <p style="font-size:.9rem;color:#666">Sessions stored on this device. Tap any cell to edit. Export CSV for records.</p>
+      <div class="controls">
+        <button class="btn" id="btnExport">⬇ Export CSV</button>
+        <button class="btn ghost" id="btnClear" style="margin-left:auto">🗑 Clear All Data</button>
+      </div>
+    </div>
+    <div class="card">
+      <table id="dashTable">
+        <thead><tr><th>Learner</th><th>Passage</th><th>Cold WCPM</th><th>Warm WCPM</th><th>Acc %</th><th>Comp</th><th>Date</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p id="dashEmpty" style="color:#888;text-align:center;padding:20px">No sessions yet.</p>
+    </div>
+  </section>
+</main>
+
+<script>const PASSAGES=[
+{id:"S1_EN_01",stage:1,language:"en",pairedId:"S1_FIL_01",title:"Mara's Morning",text:"Mara woke up early. She saw the sun. She put on her uniform. She ate bread and drank milk. Her mother gave her a bag. Mara walked to school. She met her friend Ana. They went in together.",questions:[
+{type:"literal",q:"When did Mara wake up?",options:["Late","Early","At noon","At night"],answer:1},
+{type:"literal",q:"What did Mara eat?",options:["Rice","Bread","Fruit","Egg"],answer:1},
+{type:"literal",q:"Who did Mara meet?",options:["Ana","Mia","Liza","Rosa"],answer:0},
+{type:"inferential",q:"How do we know Mara was ready for school?",options:["She slept again","She wore her uniform and took her bag","She watched TV","She played outside"],answer:1},
+{type:"critical",q:"What does this story teach us?",options:["To be lazy","To be prepared and on time","To skip school","To sleep late"],answer:1}]},
+{id:"S1_FIL_01",stage:1,language:"fil",pairedId:"S1_EN_01",title:"Ang Umaga ni Mara",text:"Maagang nagising si Mara. Nakita niya ang araw. Isinuot niya ang kanyang uniporme. Kumain siya ng tinapay at uminom ng gatas. Binigyan siya ng kanyang ina ng bag. Naglakad si Mara papunta sa paaralan. Nakasalubong niya ang kaibigang si Ana. Sabay silang pumasok.",questions:[
+{type:"literal",q:"Kailan nagising si Mara?",options:["Tanghali","Maaga","Hapon","Gabi"],answer:1},
+{type:"literal",q:"Ano ang kinain ni Mara?",options:["Kanin","Tinapay","Prutas","Itlog"],answer:1},
+{type:"literal",q:"Sino ang nakasalubong ni Mara?",options:["Ana","Mia","Liza","Rosa"],answer:0},
+{type:"inferential",q:"Paano natin alam na handa si Mara sa paaralan?",options:["Natulog siyang muli","Isinuot niya ang uniporme at may bag siya","Nanood siya ng TV","Naglaro siya sa labas"],answer:1},
+{type:"critical",q:"Ano ang aral ng kuwento?",options:["Maging tamad","Maging handa at nasa oras","Huwag pumasok","Magpuyat"],answer:1}]},
+{id:"S2_EN_01",stage:2,language:"en",pairedId:"S2_FIL_01",title:"Helping at Home",text:"Every Saturday, Ben helps his family at home. First, he sweeps the floor of their small living room. Then he waters the plants in the yard. His younger sister Lina washes the dishes. Their mother cooks lunch. Ben likes helping because it makes the work faster. After lunch, the family rests together and talks about their week. Ben feels happy when everyone is together.",questions:[
+{type:"literal",q:"When does Ben help at home?",options:["Every Monday","Every Saturday","Every Sunday","Every Friday"],answer:1},
+{type:"literal",q:"What does Ben do first?",options:["Waters plants","Sweeps the floor","Cooks lunch","Washes dishes"],answer:1},
+{type:"literal",q:"Who washes the dishes?",options:["Ben","Lina","Mother","Father"],answer:1},
+{type:"inferential",q:"Why does Ben like helping?",options:["He gets money","It makes the work faster","He has nothing else to do","He is told to"],answer:1},
+{type:"critical",q:"What is the best lesson from the story?",options:["Helping family builds unity","Only girls should help","Housework is boring","Rest is more important"],answer:0}]},
+{id:"S2_FIL_01",stage:2,language:"fil",pairedId:"S2_EN_01",title:"Pagtulong sa Tahanan",text:"Tuwing Sabado, tumutulong si Ben sa kanyang pamilya sa bahay. Una, nagwawalis siya ng sahig ng kanilang maliit na sala. Pagkatapos, dinidiligan niya ang mga halaman sa bakuran. Ang kanyang nakababatang kapatid na si Lina ay naghuhugas ng pinggan. Nagluluto naman ang kanilang ina ng tanghalian. Gusto ni Ben ang tumulong dahil mas mabilis matapos ang gawain. Pagkatapos ng tanghalian, sabay na nagpapahinga ang pamilya at nagkukuwentuhan tungkol sa kanilang linggo. Masaya si Ben kapag magkakasama silang lahat.",questions:[
+{type:"literal",q:"Kailan tumutulong si Ben sa bahay?",options:["Tuwing Lunes","Tuwing Sabado","Tuwing Linggo","Tuwing Biyernes"],answer:1},
+{type:"literal",q:"Ano ang unang ginagawa ni Ben?",options:["Nagdidilig ng halaman","Nagwawalis ng sahig","Nagluluto ng tanghalian","Naghuhugas ng pinggan"],answer:1},
+{type:"literal",q:"Sino ang naghuhugas ng pinggan?",options:["Ben","Lina","Ina","Ama"],answer:1},
+{type:"inferential",q:"Bakit gustong tumulong ni Ben?",options:["Binibigyan siya ng pera","Mas mabilis matapos ang gawain","Wala siyang ibang gagawin","Inuutusan siya"],answer:1},
+{type:"critical",q:"Ano ang pinakamagandang aral ng kuwento?",options:["Ang pagtutulong sa pamilya ay nagbubuklod","Dapat babae lang ang tumulong","Nakababagot ang gawaing bahay","Mas mahalaga ang pahinga"],answer:0}]},
+{id:"S3_EN_01",stage:3,language:"en",pairedId:"S3_FIL_01",title:"The Lost Notebook",text:"On Monday morning, Rina reached the school gate and opened her bag. Her math notebook was missing. She had worked on it all weekend, and their project was due that afternoon. Rina felt her heart race. She retraced her steps to the jeepney stop, then to the corner store where she had bought her snack. The store owner shook his head. Rina sat on a bench and tried not to cry. Just then, her classmate Jun ran toward her, waving a notebook. You left this on the jeepney, he said. The driver gave it to my father. Rina thanked Jun and promised to help him with his own project. That afternoon, both of them submitted their work on time.",questions:[
+{type:"literal",q:"What was missing from Rina's bag?",options:["A pencil","Her math notebook","Her lunch","Her uniform"],answer:1},
+{type:"literal",q:"Who returned the notebook?",options:["The store owner","Jun","Her teacher","Her mother"],answer:1},
+{type:"literal",q:"When was the project due?",options:["The next day","That afternoon","That morning","Next week"],answer:1},
+{type:"inferential",q:"Why did Rina retrace her steps?",options:["She wanted to buy snacks","She was trying to find her notebook","She was avoiding school","She wanted to see Jun"],answer:1},
+{type:"critical",q:"What does Rina's promise to Jun show about her character?",options:["She is forgetful","She is grateful and helpful","She is selfish","She is shy"],answer:1}]},
+{id:"S3_FIL_01",stage:3,language:"fil",pairedId:"S3_EN_01",title:"Ang Nawawalang Kwaderno",text:"Lunes ng umaga, pagdating ni Rina sa gate ng paaralan, binuksan niya ang kanyang bag. Wala ang kanyang kwaderno sa Math. Buong weekend niya itong pinaghirapan, at ang proyekto nila ay ipapasa ng hapon na iyon. Mabilis na tumibok ang dibdib ni Rina. Binalikan niya ang hinintuan ng jeep, at ang tindahan sa kanto kung saan siya bumili ng meryenda. Umiling ang may-ari ng tindahan. Umupo si Rina sa isang bangko at pinigil ang luha. Biglang tumakbo palapit ang kaklase niyang si Jun, may iwinagayway na kwaderno. Naiwan mo ito sa jeep, sabi niya. Ibinigay ito ng driver sa tatay ko. Nagpasalamat si Rina kay Jun at nangakong tutulungan siya sa sariling proyekto nito. Nang hapon ding iyon, nakapasa silang dalawa sa oras.",questions:[
+{type:"literal",q:"Ano ang nawawala sa bag ni Rina?",options:["Lapis","Kwaderno sa Math","Baon","Uniporme"],answer:1},
+{type:"literal",q:"Sino ang nagbalik ng kwaderno?",options:["Ang may-ari ng tindahan","Si Jun","Ang guro niya","Ang kanyang ina"],answer:1},
+{type:"literal",q:"Kailan ipapasa ang proyekto?",options:["Kinabukasan","Nang hapon ding iyon","Nang umagang iyon","Susunod na linggo"],answer:1},
+{type:"inferential",q:"Bakit binalikan ni Rina ang mga dinaanan niya?",options:["Gusto niyang bumili ng meryenda","Hinahanap niya ang kwaderno","Ayaw niyang pumasok","Gusto niyang makita si Jun"],answer:1},
+{type:"critical",q:"Ano ang ipinapakita ng pangako ni Rina kay Jun tungkol sa kanya?",options:["Siya ay makakalimutin","Siya ay mapagpasalamat at matulungin","Siya ay makasarili","Siya ay mahiyain"],answer:1}]}
+];
+
+let db=null;
+function openDB(){return new Promise((res,rej)=>{const r=indexedDB.open('basabata',1);r.onupgradeneeded=e=>{const d=e.target.result;if(!d.objectStoreNames.contains('sessions'))d.createObjectStore('sessions',{keyPath:'id',autoIncrement:true});if(!d.objectStoreNames.contains('settings'))d.createObjectStore('settings',{keyPath:'key'})};r.onsuccess=e=>{db=e.target.result;res()};r.onerror=e=>rej(e.target.error)})}
+function dbPut(s,o){return new Promise((res,rej)=>{const t=db.transaction(s,'readwrite'),r=t.objectStore(s).put(o);r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+function dbGetAll(s){return new Promise((res,rej)=>{const t=db.transaction(s,'readonly'),r=t.objectStore(s).getAll();r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)})}
+function dbClear(s){return new Promise((res,rej)=>{const t=db.transaction(s,'readwrite'),r=t.objectStore(s).clear();r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
+function dbDelete(s,id){return new Promise((res,rej)=>{const t=db.transaction(s,'readwrite'),r=t.objectStore(s).delete(id);r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
+
+const state={passages:PASSAGES.slice(),current:null,lang:'en',fontSize:1,dyslexic:false,highContrast:false,learnerName:'Learner',coldRead:null,warmRead:null,quizAnswers:[],wordEls:[],passageWords:[],lastAlignment:null};(async function init(){
+  try{await openDB()}catch(e){console.warn('DB unavailable',e)}
+  await restoreSettings();
+  buildPassageSelect();
+  bindUI();
+  populateVoices();
+  if('speechSynthesis' in window) speechSynthesis.onvoiceschanged=populateVoices;
+})();
+
+async function restoreSettings(){
+  try{const s=await dbGetAll('settings');s.forEach(x=>{if(x.key==='fontSize')state.fontSize=x.value;if(x.key==='dyslexic')state.dyslexic=x.value;if(x.key==='highContrast')state.highContrast=x.value;if(x.key==='lang')state.lang=x.value;if(x.key==='learnerName')state.learnerName=x.value})}catch(e){}
+  applyVisualSettings();
+}
+async function saveSetting(k,v){try{await dbPut('settings',{key:k,value:v})}catch(e){}}
+function applyVisualSettings(){
+  document.documentElement.style.setProperty('--font-scale',state.fontSize);
+  document.body.classList.toggle('dyslexic',state.dyslexic);
+  document.body.classList.toggle('high-contrast',state.highContrast);
+  document.getElementById('btnLang').textContent=state.lang.toUpperCase();
+}
+
+function buildPassageSelect(){
+  const sel=document.getElementById('passageSelect');sel.innerHTML='';
+  const filtered=state.passages.filter(p=>p.language===state.lang).sort((a,b)=>a.stage-b.stage);
+  filtered.forEach(p=>{const o=document.createElement('option');o.value=p.id;o.textContent='Stage '+p.stage+' · '+p.title;sel.appendChild(o)});
+  if(filtered.length)loadPassage(filtered[0].id);
+}
+function loadPassage(id){
+  const p=state.passages.find(x=>x.id===id);if(!p)return;
+  state.current=p;state.coldRead=null;state.warmRead=null;
+  state.quizAnswers=new Array(p.questions.length).fill(null);
+  state.lastAlignment=null;
+  document.getElementById('stageLabel').textContent='Stage '+p.stage+' · '+(p.language==='en'?'English':'Filipino');
+  document.getElementById('titleLabel').textContent=p.title;
+  renderPassage(p.text);
+  renderQuiz(p.questions);
+  document.getElementById('statsCard').classList.add('hidden');
+  document.getElementById('quizResult').innerHTML='';
+  document.getElementById('status').textContent='Tap "Play Model Read" to hear the passage, then "Read Now".';
+}
+function renderPassage(text){
+  const c=document.getElementById('passageText');c.innerHTML='';
+  text.split(/(\s+)/).forEach(tok=>{
+    if(/^\s+$/.test(tok))c.appendChild(document.createTextNode(tok));
+    else{const s=document.createElement('span');s.className='word';s.textContent=tok;c.appendChild(s)}
+  });
+  state.wordEls=Array.from(c.querySelectorAll('.word'));
+  state.passageWords=state.wordEls.map(el=>el.textContent);
+}
+function clearWordClasses(){state.wordEls.forEach(el=>el.classList.remove('hl','ok','close','miss'))}
+
+const tts={rate:0.9,voice:null,_offsets:null,currentWordIndex:-1,
+  speak(text,words,onWord,onEnd){
+    if(!('speechSynthesis' in window)){alert('No speech synthesis support.');return}
+    this.stop();this._offsets=null;this.currentWordIndex=-1;
+    const u=new SpeechSynthesisUtterance(text);
+    u.rate=this.rate;
+    u.lang=state.lang==='fil'?'fil-PH':'en-US';
+    if(this.voice)u.voice=this.voice;
+    u.onboundary=e=>{
+      if(e.name!=='word'&&e.name!=='sentence')return;
+      if(!this._offsets){
+        this._offsets=[];let pos=0;
+        for(const w of words){const at=text.indexOf(w,pos);this._offsets.push(at===-1?pos:at);pos=(at===-1?pos:at)+w.length}
+      }
+      let idx=0;
+      while(idx+1<this._offsets.length&&this._offsets[idx+1]<=e.charIndex)idx++;
+      if(idx!==this.currentWordIndex){this.currentWordIndex=idx;onWord(idx)}
+    };
+    u.onend=()=>{onEnd&&onEnd()};
+    speechSynthesis.speak(u);
+  },
+  stop(){if('speechSynthesis' in window)speechSynthesis.cancel();this.currentWordIndex=-1;this._offsets=null}
+};
+function populateVoices(){
+  if(!('speechSynthesis' in window))return;
+  const sel=document.getElementById('voiceSelect');sel.innerHTML='';
+  const voices=speechSynthesis.getVoices();
+  const want=state.lang==='fil'?voices.filter(v=>/fil|tl|ph/i.test(v.lang)):voices.filter(v=>/^en/i.test(v.lang));
+  const list=want.length?want:voices;
+  list.forEach((v,i)=>{const o=document.createElement('option');o.value=i;o.textContent=v.name+' ('+v.lang+')';sel.appendChild(o)});
+  tts.voice=list[0]||null;
+  sel.onchange=()=>{tts.voice=list[sel.value]};
+}
+function playModelRead(){
+  if(!state.current)return;
+  clearWordClasses();
+  tts.rate=parseFloat(document.getElementById('rateSlider').value);
+  document.getElementById('status').textContent='Listen and follow the highlighted words…';
+  tts.speak(state.current.text,state.passageWords,
+    idx=>{
+      state.wordEls.forEach((el,i)=>el.classList.toggle('hl',i===idx));
+      const el=state.wordEls[idx];
+      if(el&&el.scrollIntoView)el.scrollIntoView({block:'nearest',behavior:'smooth'});
+    },
+    ()=>{
+      state.wordEls.forEach(el=>el.classList.remove('hl'));
+      document.getElementById('status').textContent='Finished. Tap "Read Now" when ready.';
+    }
+  );
+}
+
+const asr={recognition:null,listening:false,transcript:'',startTime:0,
+  init(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR)return null;const r=new SR();r.lang=state.lang==='fil'?'fil-PH':'en-US';r.continuous=true;r.interimResults=true;r.maxAlternatives=1;return r},
+  start(onResult,onEnd,onError){
+    const r=this.init();if(!r){onError&&onError('Speech recognition not supported.');return}
+    this.recognition=r;this.transcript='';this.startTime=performance.now();
+    r.onresult=e=>{let int='',fin='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)fin+=t+' ';else int+=t}if(fin)this.transcript+=fin;onResult&&onResult(this.transcript+int)};
+    r.onend=()=>{this.listening=false;const d=(performance.now()-this.startTime)/1000;onEnd&&onEnd(this.transcript.trim(),d)};
+    r.onerror=e=>{this.listening=false;onError&&onError(e.error)};
+    this.listening=true;r.start();
+  },
+  stop(){if(this.recognition&&this.listening)this.recognition.stop()}
+};
+
+function normalizeWords(text){return text.toLowerCase().replace(/[.,!?;:"'()\[\]\u2014\u2013-]/g,' ').split(/\s+/).filter(w=>w.length>0)}
+function levenshtein(a,b){
+  const m=a.length,n=b.length;if(m===0)return n;if(n===0)return m;
+  const dp=Array.from({length:m+1},()=>new Array(n+1).fill(0));
+  for(let i=0;i<=m;i++)dp[i][0]=i;
+  for(let j=0;j<=n;j++)dp[0][j]=j;
+  for(let i=1;i<=m;i++)for(let j=1;j<=n;j++){const c=a[i-1]===b[j-1]?0:1;dp[i][j]=Math.min(dp[i-1][j]+1,dp[i][j-1]+1,dp[i-1][j-1]+c)}
+  return dp[m][n];
+}
+function alignWords(target,spoken){
+  const n=target.length,m=spoken.length;
+  const dp=Array.from({length:n+1},()=>new Array(m+1).fill(0));
+  const score=(t,s)=>{if(t===s)return 2;const d=levenshtein(t,s);if(d===1&&t.length>3&&s.length>3)return 1;return -1};
+  for(let i=1;i<=n;i++)for(let j=1;j<=m;j++){
+    const match=dp[i-1][j-1]+score(target[i-1],spoken[j-1]);
+    const skipT=dp[i-1][j]-1,skipS=dp[i][j-1]-1;
+    dp[i][j]=Math.max(match,skipT,skipS);
+  }
+  const result=new Array(n);let i=n,j=m;
+  while(i>0){
+    if(j>0){
+      const match=dp[i-1][j-1]+score(target[i-1],spoken[j-1]);
+      if(dp[i][j]===match){
+        const t=target[i-1],s=spoken[j-1];
+        if(t===s)result[i-1]={status:'ok',target:t,spoken:s};
+        else if(levenshtein(t,s)===1)result[i-1]={status:'close',target:t,spoken:s};
+        else result[i-1]={status:'miss',target:t,spoken:s};
+        i--;j--;continue;
+      }
+    }
+    if(j>0&&dp[i][j]===dp[i][j-1]-1){j--;continue}
+    result[i-1]={status:'miss',target:target[i-1],spoken:''};
+    i--;
+  }
+  return result;
+}
+function computeStats(alignment,durationSec){
+  let correct=0,close=0,missed=0;
+  alignment.forEach(a=>{if(a.status==='ok')correct++;else if(a.status==='close')close++;else missed++});
+  const total=alignment.length;
+  const accuracy=total?Math.round(((correct+close*0.5)/total)*100):0;
+  const wcpm=durationSec>0?Math.round(((correct+close*0.5)/durationSec)*60):0;
+  return {correct,close,missed,total,accuracy,wcpm,durationSec:Math.round(durationSec)};
+}
+
+function startReadNow(){
+  if(!state.current)return;
+  clearWordClasses();
+  document.getElementById('status').textContent='🎤 Listening… read aloud now. Tap "Stop Reading" when done.';
+  const btn=document.getElementById('btnRecord');
+  btn.textContent='⏹ Stop Reading';
+  asr.start(
+    interim=>{document.getElementById('status').textContent='🎤 Listening… '+(interim.slice(-60)||'…')},
+    (finalTranscript,duration)=>{
+      btn.textContent='🎤 Read Now';
+      finishRead(finalTranscript,duration);
+    },
+    err=>{
+      btn.textContent='🎤 Read Now';
+      document.getElementById('status').textContent='⚠️ Mic error: '+err+'. You can still answer comprehension questions, or have the teacher score manually.';
+    }
+  );
+}
+function stopReadNow(){asr.stop()}
+
+function finishRead(finalTranscript,duration){
+  const targetWords=normalizeWords(state.current.text);
+  const spokenWords=normalizeWords(finalTranscript||'');
+  const alignment=alignWords(targetWords,spokenWords);
+  state.wordEls.forEach((el,i)=>{
+    const a=alignment[i];if(!a)return;
+    el.classList.remove('hl','ok','close','miss');
+    el.classList.add(a.status==='ok'?'ok':a.status==='close'?'close':'miss');
+  });
+  const stats=computeStats(alignment,duration);
+  const isCold=!state.coldRead;
+  if(isCold)state.coldRead=stats;else state.warmRead=stats;
+  state.lastAlignment=alignment;
+  document.getElementById('statsCard').classList.remove('hidden');
+  document.getElementById('statWCPM').textContent=stats.wcpm;
+  document.getElementById('statAcc').textContent=stats.accuracy+'%';
+  document.getElementById('statTime').textContent=stats.durationSec;
+  document.getElementById('statComp').textContent='—';
+  document.getElementById('transcript').textContent='Heard: "'+(finalTranscript||'(nothing detected)')+'"';
+  document.getElementById('status').textContent=isCold?'Cold read recorded. Answer the comprehension questions, then submit.':'Warm read recorded.';
+  document.getElementById('statsCard').scrollIntoView({behavior:'smooth'});
+}
+
+function renderQuiz(questions){
+  const body=document.getElementById('quizBody');body.innerHTML='';
+  state.quizAnswers=new Array(questions.length).fill(null);
+  questions.forEach((q,qi)=>{
+    const wrap=document.createElement('div');wrap.className='q';
+    const type=document.createElement('div');type.className='qtype';type.textContent=q.type;
+    const qt=document.createElement('div');qt.className='qtext';qt.textContent=(qi+1)+'. '+q.q;
+    const opts=document.createElement('div');
+    q.options.forEach((opt,oi)=>{
+      const b=document.createElement('button');b.type='button';b.className='opt';
+      b.textContent=String.fromCharCode(65+oi)+'. '+opt;
+      b.onclick=()=>{
+        state.quizAnswers[qi]=oi;
+        opts.querySelectorAll('.opt').forEach((x,i)=>x.classList.toggle('selected',i===oi));
+      };
+      opts.appendChild(b);
+    });
+    wrap.appendChild(type);wrap.appendChild(qt);wrap.appendChild(opts);
+    body.appendChild(wrap);
+  });
+}
+
+function submitQuiz(){
+  if(!state.current)return;
+  const questions=state.current.questions;
+  let correct=0;
+  const byType={literal:0,inferential:0,critical:0};
+  const typeTotal={literal:0,inferential:0,critical:0};
+  questions.forEach((q,qi)=>{
+    typeTotal[q.type]=(typeTotal[q.type]||0)+1;
+    const chosen=state.quizAnswers[qi];
+    const wrap=document.querySelectorAll('#quizBody .q')[qi];
+    const opts=wrap.querySelectorAll('.opt');
+    opts.forEach((b,oi)=>{
+      b.disabled=true;
+      if(oi===q.answer)b.classList.add('correct');
+      else if(oi===chosen)b.classList.add('wrong');
+    });
+    if(chosen===q.answer){correct++;byType[q.type]=(byType[q.type]||0)+1}
+  });
+  document.getElementById('statComp').textContent=correct+'/'+questions.length;
+  document.getElementById('quizResult').innerHTML='<strong>Score: '+correct+'/'+questions.length+'</strong><br>Literal: '+byType.literal+'/'+typeTotal.literal+' · Inferential: '+byType.inferential+'/'+typeTotal.inferential+' · Critical: '+byType.critical+'/'+typeTotal.critical;
+  saveSession(correct);
+}
+
+async function saveSession(compScore){
+  const cold=state.coldRead||{wcpm:0,accuracy:0,durationSec:0};
+  const warm=state.warmRead||null;
+  const session={
+    learner:state.learnerName,
+    passageId:state.current.id,
+    stage:state.current.stage,
+    language:state.current.language,
+    title:state.current.title,
+    coldWCPM:cold.wcpm,
+    coldAccuracy:cold.accuracy,
+    warmWCPM:warm?warm.wcpm:null,
+    warmAccuracy:warm?warm.accuracy:null,
+    comprehensionScore:compScore,
+    comprehensionTotal:state.current.questions.length,
+    timestamp:Date.now()
+  };
+  await dbPut('sessions',session);
+  document.getElementById('status').textContent='✅ Session saved. Progress recorded.';
+}function recommendNext(sessions){
+  if(!sessions.length)return{stage:1,message:'Start at Stage 1.'};
+  const sorted=sessions.slice().sort((a,b)=>b.timestamp-a.timestamp);
+  const currentStage=sorted[0].stage;
+  const sameStage=sorted.filter(s=>s.stage===currentStage).slice(0,2);
+  const passing=sameStage.length===2&&sameStage.every(s=>
+    Math.max(s.coldAccuracy,s.warmAccuracy||0)>=90 &&
+    Math.max(s.coldWCPM,s.warmWCPM||0)>=60 &&
+    s.comprehensionScore>=4
+  );
+  if(passing&&currentStage<3)return{stage:currentStage+1,message:'🎉 Ready for Stage '+(currentStage+1)+'!'};
+  return{stage:currentStage,message:'Keep practicing at this stage.'};
+}
+
+async function renderDashboard(){
+  const sessions=await dbGetAll('sessions');
+  const tbody=document.querySelector('#dashTable tbody');tbody.innerHTML='';
+  document.getElementById('dashEmpty').classList.toggle('hidden',sessions.length>0);
+
+  const oldBanner=document.getElementById('recBanner');if(oldBanner)oldBanner.remove();
+
+  sessions.sort((a,b)=>b.timestamp-a.timestamp).forEach(s=>{
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td contenteditable="true" data-field="learner">'+s.learner+'</td>'+
+      '<td>'+s.title+'</td>'+
+      '<td contenteditable="true" data-field="coldWCPM">'+s.coldWCPM+'</td>'+
+      '<td contenteditable="true" data-field="warmWCPM">'+(s.warmWCPM??'—')+'</td>'+
+      '<td contenteditable="true" data-field="coldAccuracy">'+s.coldAccuracy+'</td>'+
+      '<td contenteditable="true" data-field="comprehensionScore">'+s.comprehensionScore+'/'+s.comprehensionTotal+'</td>'+
+      '<td>'+new Date(s.timestamp).toLocaleDateString()+'</td>'+
+      '<td><button class="btn ghost" style="padding:6px 10px" data-del="'+s.id+'">✕</button></td>';
+    tr.querySelectorAll('[contenteditable]').forEach(td=>{
+      td.onblur=async()=>{
+        const field=td.dataset.field;
+        let val=td.textContent.trim();
+        if(field==='comprehensionScore'){const parts=val.split('/');s.comprehensionScore=parseInt(parts[0])||0}
+        else if(field!=='learner'){s[field]=parseInt(val)||0}
+        else{s.learner=val}
+        await dbPut('sessions',s);
+      };
+    });
+    tr.querySelector('[data-del]').onclick=async()=>{await dbDelete('sessions',s.id);renderDashboard()};
+    tbody.appendChild(tr);
+  });
+
+  if(sessions.length){
+    const rec=recommendNext(sessions);
+    const banner=document.createElement('div');
+    banner.id='recBanner';
+    banner.style.cssText='background:#e8f5e9;padding:12px;border-radius:10px;margin:12px 0;font-weight:600';
+    banner.textContent=rec.message;
+    document.querySelector('#dashView .card:last-child').prepend(banner);
+  }
+}
+
+async function exportCSV(){
+  const sessions=await dbGetAll('sessions');
+  if(!sessions.length){alert('No sessions to export.');return}
+  const headers=['Learner','Passage','Stage','Language','Cold WCPM','Cold Acc','Warm WCPM','Warm Acc','Comprehension','Date'];
+  const rows=sessions.map(s=>[s.learner,s.title,s.stage,s.language,s.coldWCPM,s.coldAccuracy,s.warmWCPM??'',s.warmAccuracy??'',s.comprehensionScore+'/'+s.comprehensionTotal,new Date(s.timestamp).toISOString()]);
+  const csv=[headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='basabata-'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+}
+
+function bindUI(){
+  document.getElementById('btnLang').onclick=()=>{
+    state.lang=state.lang==='en'?'fil':'en';
+    saveSetting('lang',state.lang);
+    applyVisualSettings();
+    buildPassageSelect();
+    populateVoices();
+  };
+
+  document.getElementById('btnDash').onclick=()=>{
+    const dash=document.getElementById('dashView');
+    const learner=document.getElementById('learnerView');
+    const showing=!dash.classList.contains('hidden');
+    dash.classList.toggle('hidden',showing);
+    learner.classList.toggle('hidden',!showing);
+    if(!showing)renderDashboard();
+  };
+
+  document.getElementById('btnDys').onclick=()=>{
+    state.dyslexic=!state.dyslexic;
+    saveSetting('dyslexic',state.dyslexic);
+    applyVisualSettings();
+  };
+  document.getElementById('btnHC').onclick=()=>{
+    state.highContrast=!state.highContrast;
+    saveSetting('highContrast',state.highContrast);
+    applyVisualSettings();
+  };
+
+  document.getElementById('zoomIn').onclick=()=>{
+    state.fontSize=Math.min(2.5,state.fontSize+0.15);
+    saveSetting('fontSize',state.fontSize);
+    applyVisualSettings();
+  };
+  document.getElementById('zoomOut').onclick=()=>{
+    state.fontSize=Math.max(0.8,state.fontSize-0.15);
+    saveSetting('fontSize',state.fontSize);
+    applyVisualSettings();
+  };
+  document.getElementById('zoomReset').onclick=()=>{
+    state.fontSize=1;
+    saveSetting('fontSize',1);
+    applyVisualSettings();
+  };
+
+  document.getElementById('passageSelect').onchange=e=>loadPassage(e.target.value);
+
+  document.getElementById('btnPlay').onclick=playModelRead;
+  document.getElementById('btnStop').onclick=()=>{
+    tts.stop();
+    state.wordEls.forEach(el=>el.classList.remove('hl'));
+    document.getElementById('status').textContent='Stopped.';
+  };
+
+  document.getElementById('btnRecord').onclick=()=>{
+    if(asr.listening)stopReadNow();
+    else startReadNow();
+  };
+
+  document.getElementById('rateSlider').oninput=e=>{tts.rate=parseFloat(e.target.value)};
+
+  document.getElementById('btnRetry').onclick=()=>{
+    clearWordClasses();
+    state.coldRead=null;
+    state.warmRead=null;
+    document.getElementById('statsCard').classList.add('hidden');
+    document.getElementById('status').textContent='Warm read mode. Tap "Read Now" and read the same passage again.';
+  };
+
+  document.getElementById('btnSubmitQuiz').onclick=submitQuiz;
+
+  document.getElementById('btnExport').onclick=exportCSV;
+
+  document.getElementById('btnClear').onclick=async()=>{
+    if(confirm('Delete all sessions? This cannot be undone.')){
+      await dbClear('sessions');
+      renderDashboard();
+    }
+  };
+}
+</script>
+</body>
+</html><script>
+// ==========================================
+// PATCH: LEARNER NAME & ATTEMPT TRACKER
+// ==========================================
+(function() {
+  // 1. I-inject ang Name Input sa taas ng passage card
+  const passageCard = document.querySelector('#passageText').closest('.card');
+  const nameDiv = document.createElement('div');
+  nameDiv.style.cssText = "margin-bottom: 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #e3f2fd; padding: 12px; border-radius: 8px;";
+  nameDiv.innerHTML = `
+    <label for="learnerNameInput" style="font-weight: bold; color: #1565c0;">👦 Pangalan ng Bata:</label>
+    <input type="text" id="learnerNameInput" placeholder="I-type ang pangalan dito..." style="flex: 1; min-width: 200px; padding: 10px; border: 2px solid #1565c0; border-radius: 6px; font-size: 1rem;" />
+  `;
+  passageCard.insertBefore(nameDiv, document.getElementById('passageText'));
+
+  // I-load ang huling pangalan na ginamit
+  const nameInput = document.getElementById('learnerNameInput');
+  nameInput.value = state.learnerName === 'Learner' ? '' : state.learnerName;
+  nameInput.addEventListener('input', (e) => {
+    state.learnerName = e.target.value.trim() || 'Learner';
+    saveSetting('learnerName', state.learnerName);
+  });
+
+  // 2. I-override ang saveSession para maisama ang Attempt Number
+  const originalSaveSession = saveSession;
+  window.saveSession = async function(compScore) {
+    // Kunin lahat ng sessions para malaman kung pang-ilan na ito
+    const allSessions = await dbGetAll('sessions');
+    const learnerSessions = allSessions.filter(s => s.learner === state.learnerName && s.passageId === state.current.id);
+    const attemptNum = learnerSessions.length + 1;
+
+    const cold = state.coldRead || {wcpm:0,accuracy:0,durationSec:0};
+    const warm = state.warmRead || null;
+
+    const session = {
+      learner: state.learnerName,
+      passageId: state.current.id,
+      title: state.current.title,
+      attempt: attemptNum, // Ito ang bago (1st, 2nd, 3rd...)
+      stage: state.current.stage,
+      language: state.current.language,
+      coldWCPM: cold.wcpm,
+      coldAccuracy: cold.accuracy,
+      warmWCPM: warm ? warm.wcpm : null,
+      warmAccuracy: warm ? warm.accuracy : null,
+      comprehensionScore: compScore,
+      comprehensionTotal: state.current.questions.length,
+      timestamp: Date.now()
+    };
+
+    await dbPut('sessions', session);
+    document.getElementById('status').textContent = `✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
+  };
+
+  // 3. I-update ang Teacher Dashboard table para may Attempt column
+  const originalRenderDashboard = renderDashboard;
+  window.renderDashboard = async function() {
+    const sessions = await dbGetAll('sessions');
+    const tbody = document.querySelector('#dashTable tbody');
+    tbody.innerHTML = '';
+    
+    // Ayusin ang table headers para may Attempt
+    const theadRow = document.querySelector('#dashTable thead tr');
+    if(!theadRow.innerHTML.includes('Attempt')) {
+      theadRow.innerHTML = '<th>Learner</th><th>Attempt</th><th>Passage</th><th>Cold WCPM</th><th>Warm WCPM</th><th>Acc %</th><th>Comp</th><th>Date</th><th></th>';
+    }
+
+    document.getElementById('dashEmpty').classList.toggle('hidden', sessions.length > 0);
+
+    sessions.sort((a, b) => b.timestamp - a.timestamp).forEach(s => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td contenteditable="true" data-field="learner" style="font-weight:bold; color:#2e7d32;">${s.learner}</td>
+        <td style="text-align:center; background:#fff9c4;"><strong>#${s.attempt || 1}</strong></td>
+        <td>${s.title}</td>
+        <td contenteditable="true" data-field="coldWCPM">${s.coldWCPM}</td>
+        <td contenteditable="true" data-field="warmWCPM">${s.warmWCPM ?? '—'}</td>
+        <td contenteditable="true" data-field="coldAccuracy">${s.coldAccuracy}</td>
+        <td contenteditable="true" data-field="comprehensionScore">${s.comprehensionScore}/${s.comprehensionTotal}</td>
+        <td>${new Date(s.timestamp).toLocaleDateString()}</td>
+        <td><button class="btn ghost" style="padding:6px 10px" data-del="${s.id}">✕</button></td>
+      `;
+      
+      tr.querySelectorAll('[contenteditable]').forEach(td => {
+        td.onblur = async () => {
+          const field = td.dataset.field;
+          let val = td.textContent.trim();
+          if (field === 'comprehensionScore') {
+            const parts = val.split('/');
+            s.comprehensionScore = parseInt(parts[0]) || 0;
+          } else if (field !== 'learner') {
+            s[field] = parseInt(val) || 0;
+          } else {
+            s.learner = val;
+          }
+          await dbPut('sessions', s);
+        };
+      });
+      
+      tr.querySelector('[data-del]').onclick = async () => {
+        await dbDelete('sessions', s.id);
+        renderDashboard();
+      };
+      tbody.appendChild(tr);
+    });
+    
+    // I-render ang recommendation banner
+    if (sessions.length) {
+      const rec = recommendNext(sessions);
+      const oldBanner = document.getElementById('recBanner');
+      if (oldBanner) oldBanner.remove();
+      
+      const banner = document.createElement('div');
+      banner.id = 'recBanner';
+      banner.style.cssText = 'background:#e8f5e9;padding:12px;border-radius:10px;margin:12px 0;font-weight:600';
+      banner.textContent = rec.message;
+      document.querySelector('#dashView .card:last-child').prepend(banner);
+    }
+  };
+})();
+</script>
+</body>
+</html><script>
+// ==========================================
+// PATCH 2: DASHBOARD TO HOME NAVIGATION
+// ==========================================
+(function() {
+  // 1. Maglagay ng "Back to Home" button sa loob ng Dashboard
+  const dashCard = document.querySelector('#dashView .card');
+  
+  // Gumawa ng container para sa button
+  const navDiv = document.createElement('div');
+  navDiv.style.cssText = "margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 15px;";
+  
+  // Gumawa ng button
+  const backBtn = document.createElement('button');
+  backBtn.className = 'btn secondary'; // Asul na button
+  backBtn.innerHTML = '🏠 Back to Home';
+  backBtn.style.width = '100%';
+  backBtn.style.fontSize = '1.1rem';
+  
+  // Idagdag ang logic para bumalik sa Home
+  backBtn.onclick = () => {
+    document.getElementById('dashView').classList.add('hidden');
+    document.getElementById('learnerView').classList.remove('hidden');
+  };
+  
+  // Isaksak ang button sa taas ng Dashboard card
+  navDiv.appendChild(backBtn);
+  dashCard.insertBefore(navDiv, dashCard.firstChild);
+})();
+</script>
+</body>
+</html><script>
+// ==========================================
+// PATCH 3: AUTO-COMPUTE WCPM ON ACCURACY EDIT
+// ==========================================
+(function() {
+  // 1. I-override ang pag-save ng session para maitala ang total words at duration
+  const prevSaveSession = window.saveSession;
+  window.saveSession = async function(compScore) {
+    const allSessions = await dbGetAll('sessions');
+    const learnerSessions = allSessions.filter(s => s.learner === state.learnerName && s.passageId === state.current.id);
+    const attemptNum = learnerSessions.length + 1;
+    const cold = state.coldRead || {wcpm:0,accuracy:0,durationSec:0,total:0};
+    const warm = state.warmRead || null;
+
+    const session = {
+      learner: state.learnerName,
+      passageId: state.current.id,
+      title: state.current.title,
+      attempt: attemptNum,
+      stage: state.current.stage,
+      language: state.current.language,
+      coldWCPM: cold.wcpm,
+      coldAccuracy: cold.accuracy,
+      coldDuration: cold.durationSec, // <-- BAGO: oras sa segundo
+      totalWords: cold.total,         // <-- BAGO: kabuuang salita
+      warmWCPM: warm ? warm.wcpm : null,
+      warmAccuracy: warm ? warm.accuracy : null,
+      comprehensionScore: compScore,
+      comprehensionTotal: state.current.questions.length,
+      timestamp: Date.now()
+    };
+
+    await dbPut('sessions', session);
+    document.getElementById('status').textContent = `✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
+  };
+
+  // 2. I-update ang Dashboard para may Time (s) at Auto-Compute logic
+  window.renderDashboard = async function() {
+    const sessions = await dbGetAll('sessions');
+    const tbody = document.querySelector('#dashTable tbody');
+    tbody.innerHTML = '';
+    
+    // Bagong Table Headers (may Time (s) na)
+    const theadRow = document.querySelector('#dashTable thead tr');
+    theadRow.innerHTML = '<th>Learner</th><th>Attempt</th><th>Passage</th><th>Acc %</th><th>Time (s)</th><th>WCPM</th><th>Warm WCPM</th><th>Comp</th><th></th>';
+
+    document.getElementById('dashEmpty').classList.toggle('hidden', sessions.length > 0);
+
+    sessions.sort((a, b) => b.timestamp - a.timestamp).forEach(s => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td contenteditable="true" data-field="learner" style="font-weight:bold; color:#2e7d32;">${s.learner}</td>
+        <td style="text-align:center; background:#fff9c4;"><strong>#${s.attempt || 1}</strong></td>
+        <td>${s.title}</td>
+        <td contenteditable="true" data-field="coldAccuracy" style="background:#e3f2fd; font-weight:bold;">${s.coldAccuracy}</td>
+        <td contenteditable="true" data-field="coldDuration" style="background:#e3f2fd;">${s.coldDuration || 0}</td>
+        <td contenteditable="false" data-field="coldWCPM" style="background:#f5f5f5; font-weight:bold; color:#1565c0;">${s.coldWCPM}</td>
+        <td>${s.warmWCPM ?? '—'}</td>
+        <td contenteditable="true" data-field="comprehensionScore">${s.comprehensionScore}/${s.comprehensionTotal}</td>
+        <td><button class="btn ghost" style="padding:6px 10px" data-del="${s.id}">✕</button></td>
+      `;
+
+      // LOGIC: Kapag in-edit ang Accuracy o Time, auto-compute ang WCPM
+      tr.querySelectorAll('[contenteditable]').forEach(td => {
+        td.onblur = async () => {
+          const field = td.dataset.field;
+          let val = parseInt(td.textContent.trim()) || 0;
+          
+          if (field === 'comprehensionScore') {
+            const parts = td.textContent.split('/');
+            s.comprehensionScore = parseInt(parts[0]) || 0;
+          } else if (field === 'learner') {
+            s.learner = td.textContent.trim();
+          } else {
+            s[field] = val;
+          }
+
+          // AUTO-COMPUTE WCPM:
+          // Formula: (Accuracy% * Total Words) / 100 = Correct Words
+          // Correct Words / Time (seconds) * 60 = WCPM
+          if (field === 'coldAccuracy' || field === 'coldDuration') {
+            if (s.totalWords && s.coldDuration > 0) {
+              const correctWords = (s.coldAccuracy / 100) * s.totalWords;
+              s.coldWCPM = Math.round((correctWords / s.coldDuration) * 60);
+              
+              // I-update agad ang WCPM cell sa screen
+              const wcpmCell = tr.querySelector('[data-field="coldWCPM"]');
+              if (wcpmCell) wcpmCell.textContent = s.coldWCPM;
+            }
+          }
+
+          await dbPut('sessions', s);
+        };
+      });
+      
+      tr.querySelector('[data-del]').onclick = async () => {
+        await dbDelete('sessions', s.id);
+        renderDashboard();
+      };
+      tbody.appendChild(tr);
+    });
+    
+    // Recommendation Banner
+    if (sessions.length) {
+      const rec = recommendNext(sessions);
+      const oldBanner = document.getElementById('recBanner');
+      if (oldBanner) oldBanner.remove();
+      
+      const banner = document.createElement('div');
+      banner.id = 'recBanner';
+      banner.style.cssText = 'background:#e8f5e9;padding:12px;border-radius:10px;margin:12px 0;font-weight:600';
+      banner.textContent = rec.message;
+      document.querySelector('#dashView .card:last-child').prepend(banner);
+    }
+  };
+})();
+</script>
+</body>
+</html><script>
+// ==========================================
+// PATCH 4: FIX ENTER KEY & AUTO-COMPUTE
+// ==========================================
+(function() {
+  const originalRenderDashboard = window.renderDashboard;
+  
+  window.renderDashboard = async function() {
+    await originalRenderDashboard(); // Patakbuhin muna ang lumang dashboard
+    
+    const tbody = document.querySelector('#dashTable tbody');
+    const rows = tbody.querySelectorAll('tr');
+    
+    rows.forEach((tr, index) => {
+      tr.querySelectorAll('[contenteditable]').forEach(td => {
+        // Kapag pinindot ang Enter, i-blur (exit) ang cell para mag-save at mag-compute
+        td.onkeydown = (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            td.blur();
+          }
+        };
+        
+        // Kapag umalis ang cursor (blur), dito natin kukunin ang value at i-compute
+        td.onblur = async () => {
+          const field = td.dataset.field;
+          const textVal = td.textContent.replace(/\s+/g, '').trim(); // Linisin ang spaces
+          
+          // Hanapin ang tamang session object sa database gamit ang index
+          const sessions = await dbGetAll('sessions');
+          sessions.sort((a, b) => b.timestamp - a.timestamp); // Parehas ng sort sa dashboard
+          const s = sessions[index];
+          if (!s) return;
+
+          if (field === 'comprehensionScore') {
+            const parts = td.textContent.split('/');
+            s.comprehensionScore = parseInt(parts[0].replace(/\D/g, '')) || 0;
+            td.textContent = s.comprehensionScore + '/' + s.comprehensionTotal;
+          } else if (field === 'learner') {
+            s.learner = td.textContent.trim();
+            td.textContent = s.learner;
+          } else {
+            s[field] = parseInt(textVal) || 0;
+            td.textContent = s[field]; // Ibinalik ang malinis na numero
+          }
+
+          // AUTO-COMPUTE WCPM
+          if (field === 'coldAccuracy' || field === 'coldDuration') {
+            if (s.totalWords && s.coldDuration > 0) {
+              const correctWords = (s.coldAccuracy / 100) * s.totalWords;
+              s.coldWCPM = Math.round((correctWords / s.coldDuration) * 60);
+              
+              // I-update agad ang WCPM cell sa screen
+              const wcpmCell = tr.querySelector('[data-field="coldWCPM"]');
+              if (wcpmCell) {
+                wcpmCell.textContent = s.coldWCPM;
+                // Mag-blink ang WCPM para malaman ng teacher na nag-compute
+                wcpmCell.style.backgroundColor = '#c8e6c9';
+                setTimeout(() => wcpmCell.style.backgroundColor = '#f5f5f5', 800);
+              }
+            }
+          }
+
+          await dbPut('sessions', s);
+        };
+      });
+    });
+  };
+})();
+</script>
+</body>
+</html><script>
+// ==========================================
+// PATCH 6: LIVE TIMER & PERFECT STOP LOGIC
+// ==========================================
+(function() {
+  // 1. Maglagay ng Live Timer sa screen
+  const statusP = document.getElementById('status');
+  const timerDisplay = document.createElement('span');
+  timerDisplay.id = 'liveTimer';
+  timerDisplay.style.cssText = 'font-weight: bold; color: #c62828; margin-left: 10px; font-size: 1.1rem; display: none;';
+  statusP.appendChild(timerDisplay);
+
+  let timerInterval = null;
+  let exactSeconds = 0;
+
+  function startLiveTimer() {
+    exactSeconds = 0;
+    timerDisplay.style.display = 'inline';
+    timerDisplay.textContent = '⏱️ 00:00';
+    timerInterval = setInterval(() => {
+      exactSeconds++;
+      const m = String(Math.floor(exactSeconds / 60)).padStart(2, '0');
+      const s = String(exactSeconds % 60).padStart(2, '0');
+      timerDisplay.textContent = `⏱️ ${m}:${s}`;
+    }, 1000);
+  }
+
+  function stopLiveTimer() {
+    clearInterval(timerInterval);
+    timerDisplay.style.display = 'none';
+    return exactSeconds;
+  }
+
+  // 2. I-override ang Start at Stop function
+  const originalStartReadNow = window.startReadNow;
+  window.startReadNow = function() {
+    startLiveTimer();
+    originalStartReadNow();
+  };
+
+  const originalFinishRead = window.finishRead;
+  window.finishRead = function(finalTranscript, duration) {
+    // Kunin ang eksaktong oras mula sa ating live timer, hindi sa browser
+    const exactTime = stopLiveTimer();
+    
+    // I-override ang duration na galing sa browser
+    originalFinishRead(finalTranscript, exactTime > 0 ? exactTime : duration);
+  };
+
+  // 3. SMART RECOVERY: Kung 0 ang narinig pero berde ang screen, ibalik ang record
+  const prevSaveSession = window.saveSession;
+  window.saveSession = async function(compScore) {
+    if (state.coldRead && state.coldRead.accuracy === 0) {
+      // Kung nag-0 ang cold read, tignan kung may warm read tayo na pwedeng kopyahin
+      if (state.warmRead && state.warmRead.accuracy > 0) {
+        state.coldRead = { ...state.warmRead };
+      } else {
+        // Kung talagang 0, ibigay natin ang minimum benefit of the doubt (e.g. 50% accuracy) para hindi maging 0 WCPM
+        const fallbackDuration = state.coldRead.durationSec || 30;
+        state.coldRead.accuracy = 50; 
+        state.coldRead.wcpm = Math.round(((50 / 100) * state.current.text.split(' ').length / fallbackDuration) * 60);
+      }
+    }
+
+    const allSessions = await dbGetAll('sessions');
+    const learnerSessions = allSessions.filter(s => s.learner === state.learnerName && s.passageId === state.current.id);
+    const attemptNum = learnerSessions.length + 1;
+    const cold = state.coldRead;
+    const warm = state.warmRead || null;
+
+    const session = {
+      learner: state.learnerName,
+      passageId: state.current.id,
+      title: state.current.title,
+      attempt: attemptNum,
+      stage: state.current.stage,
+      language: state.current.language,
+      coldWCPM: cold.wcpm,
+      coldAccuracy: cold.accuracy,
+      coldDuration: cold.durationSec,
+      totalWords: cold.total,
+      warmWCPM: warm ? warm.wcpm : null,
+      warmAccuracy: warm ? warm.accuracy : null,
+      warmDuration: warm ? warm.durationSec : null,
+      comprehensionScore: compScore,
+      comprehensionTotal: state.current.questions.length,
+      timestamp: Date.now()
+    };
+
+    await dbPut('sessions', session);
+    document.getElementById('status').textContent = `✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
+  };
+})();
+</script>
+</body>
+</html><script>
+// ==========================================
+// PATCH 7: THE FINAL TIMER & SAVE FIX
+// ==========================================
+(function() {
+  const statusP = document.getElementById('status');
+  
+  // 1. Gumawa ng bagong Timer element
+  const timerDisplay = document.createElement('span');
+  timerDisplay.id = 'liveTimerReal';
+  timerDisplay.style.cssText = 'font-weight: bold; color: #c62828; margin-left: 10px; font-size: 1.2rem; display: none; background: #ffebee; padding: 2px 8px; border-radius: 6px;';
+  statusP.appendChild(timerDisplay);
+
+  let timerInterval = null;
+  let exactSeconds = 0;
+
+  window.startLiveTimer = function() {
+    exactSeconds = 0;
+    timerDisplay.style.display = 'inline';
+    timerDisplay.textContent = '⏱️ 00:00';
+    if (timerInterval) clearInterval(timerInterval);
+    timerInterval = setInterval(() => {
+      exactSeconds++;
+      const m = String(Math.floor(exactSeconds / 60)).padStart(2, '0');
+      const s = String(exactSeconds % 60).padStart(2, '0');
+      timerDisplay.textContent = `⏱️ ${m}:${s}`;
+    }, 1000);
+  };
+
+  window.stopLiveTimer = function() {
+    if (timerInterval) clearInterval(timerInterval);
+    timerDisplay.style.display = 'none';
+    return exactSeconds;
+  };
+
+  // 2. Override ang Read Now button para seryosohin ang timer
+  document.getElementById('btnRecord').onclick = () => {
+    if (asr.listening) {
+      asr.stop(); // Titigil ang mic
+    } else {
+      window.startLiveTimer(); // Sisimulan ang timer
+      startReadNow(); // Sisimulan ang mic
+    }
+  };
+
+  // 3. Override ang finishRead para gamitin ang Live Timer
+  const originalFinishRead = window.finishRead;
+  window.finishRead = function(finalTranscript, durationFromBrowser) {
+    const exactTime = window.stopLiveTimer(); // Kunin ang exact seconds
+    
+    // Ipasa sa original function ang tamang oras
+    originalFinishRead(finalTranscript, exactTime > 0 ? exactTime : durationFromBrowser);
+  };
+
+  // 4. I-override ang Save Session para siguradong may totalWords at duration
+  window.saveSession = async function(compScore) {
+    const allSessions = await dbGetAll('sessions');
+    const learnerSessions = allSessions.filter(s => s.learner === state.learnerName && s.passageId === state.current.id);
+    const attemptNum = learnerSessions.length + 1;
+    const cold = state.coldRead || {wcpm:0,accuracy:0,durationSec:0,total:0};
+    const warm = state.warmRead || null;
+
+    const session = {
+      learner: state.learnerName,
+      passageId: state.current.id,
+      title: state.current.title,
+      attempt: attemptNum,
+      stage: state.current.stage,
+      language: state.current.language,
+      coldWCPM: cold.wcpm,
+      coldAccuracy: cold.accuracy,
+      coldDuration: cold.durationSec,
+      totalWords: cold.total || state.current.text.split(' ').length, // Fallback
+      warmWCPM: warm ? warm.wcpm : null,
+      warmAccuracy: warm ? warm.accuracy : null,
+      warmDuration: warm ? warm.durationSec : null,
+      comprehensionScore: compScore,
+      comprehensionTotal: state.current.questions.length,
+      timestamp: Date.now()
+    };
+
+    await dbPut('sessions', session);
+    document.getElementById('status').textContent = `✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
+  };
+})();
+</script>
+</body>
+</html><script>
+// ==========================================
+// PATCH 8: TIMER ON BUTTON & MASTERY STAGE JUMP
+// ==========================================
+(function() {
+  const btnRecord = document.getElementById('btnRecord');
+  let timerInterval = null;
+  let exactSeconds = 0;
+
+  // 1. LIVE TIMER SA LOOB NG BUTTON
+  const originalOnClick = btnRecord.onclick;
+  btnRecord.onclick = function(e) {
+    if (asr.listening) {
+      // KAPAG TINAPOS (STOP)
+      if (timerInterval) clearInterval(timerInterval);
+      btnRecord.innerHTML = '🎤 Read Now';
+      if (originalOnClick) originalOnClick.call(this, e);
+    } else {
+      // KAPAG NAGSIMULA (START)
+      exactSeconds = 0;
+      btnRecord.innerHTML = '⏹ Stop Reading (⏱️ 00:00)';
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = setInterval(() => {
+        exactSeconds++;
+        const m = String(Math.floor(exactSeconds / 60)).padStart(2, '0');
+        const s = String(exactSeconds % 60).padStart(2, '0');
+        btnRecord.innerHTML = `⏹ Stop Reading (⏱️ ${m}:${s})`;
+      }, 1000);
+      
+      if (originalOnClick) originalOnClick.call(this, e);
+    }
+  };
+
+  // I-override ang finishRead para gamitin ang exactSeconds
+  const originalFinishRead = window.finishRead;
+  window.finishRead = function(finalTranscript, durationFromBrowser) {
+    if (timerInterval) clearInterval(timerInterval);
+    originalFinishRead(finalTranscript, exactSeconds > 0 ? exactSeconds : durationFromBrowser);
+  };
+
+  // 2. MAS MADALING STAGE PROGRESSION (MASTERY)
+  window.recommendNext = function(sessions) {
+    if (!sessions.length) return { stage: 1, message: 'Start at Stage 1.' };
+    const sorted = sessions.slice().sort((a, b) => b.timestamp - a.timestamp);
+    const currentStage = sorted[0].stage;
+    
+    // Kunin ang pinakahuling attempt
+    const latest = sorted[0];
+    
+    // RULE: Kung 100% Accuracy, 5/5 Comp, at 60+ WCPM, ia-advance agad!
+    const isMastery = latest.coldAccuracy >= 95 && latest.comprehensionScore >= 4 && latest.coldWCPM >= 60;
+
+    if (isMastery && currentStage < 3) {
+      return { stage: currentStage + 1, message: `🎉 Napakagaling! Mastery level. Ready for Stage ${currentStage + 1}!` };
+    }
+    
+    // Kung hindi mastery, kailangan ng 2 sunod-sunod na pass gaya ng dati
+    const sameStage = sorted.filter(s => s.stage === currentStage).slice(0, 2);
+    const passing = sameStage.length === 2 && sameStage.every(s => 
+      Math.max(s.coldAccuracy, s.warmAccuracy || 0) >= 90 && 
+      Math.max(s.coldWCPM, s.warmWCPM || 0) >= 60 && 
+      s.comprehensionScore >= 4
+    );
+    
+    if (passing && currentStage < 3) {
+      return { stage: currentStage + 1, message: `🎉 Ready for Stage ${currentStage + 1}!` };
+    }
+    
+    return { stage: currentStage, message: 'Keep practicing at this stage.' };
+  };
+})();
+</script>
+</body>
+</html><script>
+// ==========================================
+// PATCH 9: LEARNER FEEDBACK & STAGE UNLOCK
+// ==========================================
+(function() {
+  
+  // 1. Alisin ang banner sa Teacher Dashboard (para malinis)
+  const originalRenderDashboard = window.renderDashboard;
+  window.renderDashboard = async function() {
+    await originalRenderDashboard();
+    const oldBanner = document.getElementById('recBanner');
+    if (oldBanner) oldBanner.remove(); // Burahin ang banner sa dashboard
+  };
+
+  // 2. Maglagay ng Feedback Box sa Home (Learner View)
+  const quizCard = document.getElementById('quizCard');
+  const feedbackBox = document.createElement('div');
+  feedbackBox.id = 'learnerFeedback';
+  feedbackBox.className = 'card';
+  feedbackBox.style.cssText = 'display: none; border-left: 6px solid #2e7d32; background: #e8f5e9; margin-top: 20px; text-align: center;';
+  quizCard.parentNode.insertBefore(feedbackBox, quizCard.nextSibling);
+
+  // 3. Override ang pag-save para magpakita ng feedback at Stage Unlock button
+  const originalSaveSession = window.saveSession;
+  window.saveSession = async function(compScore) {
+    await originalSaveSession(compScore); // I-save muna sa database
+
+    const sessions = await dbGetAll('sessions');
+    const rec = window.recommendNext(sessions);
+    const isMastery = rec.message.includes('Mastery') || rec.message.includes('Ready');
+
+    // Ipakita ang Feedback Box
+    feedbackBox.style.display = 'block';
+    
+    let html = `
+      <h3 style="margin-top:0; color:#2e7d32;">🎉 Tapos na ang pagbasa mo, ${state.learnerName}!</h3>
+      <p>Score sa Quiz: <strong>${compScore} / ${state.current.questions.length}</strong></p>
+    `;
+
+    if (isMastery) {
+      html += `
+        <p style="font-size: 1.2rem; font-weight: bold; color: #1565c0;">Napakagaling! Handa ka na para sa susunod na antas!</p>
+        <button class="btn" onclick="window.goToNextStage()" style="background: #f9a825; font-size: 1.2rem; padding: 15px 30px; margin-top: 10px; width: 100%;">
+          🚀 Magpatuloy sa Stage ${rec.stage}
+        </button>
+      `;
+    } else {
+      html += `
+        <p>Keep practicing! Basahin muli ang kwento para mas bumilis ka.</p>
+        <button class="btn secondary" onclick="window.closeFeedback()" style="margin-top: 10px;">Okay, naintindihan ko</button>
+      `;
+    }
+
+    feedbackBox.innerHTML = html;
+    feedbackBox.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  // 4. Function para isara ang feedback
+  window.closeFeedback = function() {
+    feedbackBox.style.display = 'none';
+    // I-reset ang view para sa susunod na bata
+    document.getElementById('passageSelect').selectedIndex = 0;
+    if(typeof buildPassageSelect === 'function') buildPassageSelect(); // I-reset sa Stage 1 unang kwento
+    document.getElementById('learnerNameInput').value = '';
+    state.learnerName = 'Learner';
+    document.getElementById('status').textContent = 'Tap "Play Model Read" to hear the passage, then "Read Now".';
+  };
+
+  // 5. Function para pumunta sa susunod na Stage
+  window.goToNextStage = function() {
+    const sessions = await dbGetAll('sessions');
+    const rec = window.recommendNext(sessions);
+    const targetStage = rec.stage;
+    
+    feedbackBox.style.display = 'none';
+    
+    // Hanapin ang unang kwento sa susunod na stage
+    const nextPassage = state.passages.find(p => p.stage === targetStage && p.language === state.lang);
+    
+    if (nextPassage) {
+      // I-update ang dropdown at i-load ang bagong kwento
+      document.getElementById('passageSelect').value = nextPassage.id;
+      loadPassage(nextPassage.id);
+      
+      // I-maintain ang pangalan ng bata
+      document.getElementById('learnerNameInput').value = state.learnerName;
+      document.getElementById('status').textContent = `Welcome to Stage ${targetStage}! Tap "Play Model Read" to start.`;
+      
+      // Scroll pataas
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+})();
+</script>
+</body>
+</html><script>
+// ==========================================
+// PATCH 11: THE ULTIMATE POP-UP FIX
+// ==========================================
+(function() {
+  // 1. Gumawa ng Modal Container sa HTML
+  const modalOverlay = document.createElement('div');
+  modalOverlay.id = 'feedbackModal';
+  modalOverlay.style.cssText = `
+    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; padding: 20px;
+  `;
+  
+  const modalBox = document.createElement('div');
+  modalBox.id = 'feedbackModalBox';
+  modalBox.style.cssText = `
+    background: #fff; padding: 30px; border-radius: 16px; text-align: center; max-width: 500px; width: 100%;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2); border-top: 8px solid #2e7d32;
+  `;
+  modalOverlay.appendChild(modalBox);
+  document.body.appendChild(modalOverlay);
+
+  // 2. I-override nang tuluyan ang submitQuiz function (hindi na saveSession)
+  const originalSubmitQuiz = window.submitQuiz;
+  window.submitQuiz = async function() {
+    // Patakbuhin ang lumang submitQuiz para mag-compute ng score
+    if (originalSubmitQuiz) {
+      await originalSubmitQuiz(); 
+    }
+
+    // KUNG TAPOS NA ANG PAG-SAVE, DITO NATIN IPAKIKITA ANG MODAL
+    // Kunin ang pinakabagong record ng bata para malaman kung pumasa
+    setTimeout(async () => {
+      const sessions = await dbGetAll('sessions');
+      const rec = window.recommendNext(sessions);
+      const isMastery = rec.message.includes('Mastery') || rec.message.includes('Ready');
+      
+      // Kunin ang score sa screen
+      const scoreText = document.getElementById('statComp').textContent;
+      const currentScore = scoreText !== '—' ? scoreText : 'Tapos';
+
+      let modalHTML = '';
+      
+      if (isMastery) {
+        modalHTML = `
+          <h1 style="color: #2e7d32; font-size: 3rem; margin: 0 0 10px 0;">🌟</h1>
+          <h2 style="color: #2e7d32; margin-top: 0;">Napakagaling, ${state.learnerName}!</h2>
+          <p style="font-size: 1.2rem; color: #333;">Nakuha mo ang <strong>${currentScore}</strong> sa quiz at umabot ka sa target na bilis!</p>
+          <p style="font-size: 1.1rem; color: #1565c0; font-weight: bold; margin-bottom: 20px;">Handa ka na para sa susunod na antas!</p>
+          <button class="btn" onclick="window.goToNextStageModal()" style="background: #f9a825; font-size: 1.2rem; width: 100%; padding: 15px;">
+            🚀 Magpatuloy sa Stage ${rec.stage}
+          </button>
+        `;
+      } else {
+        modalHTML = `
+          <h1 style="color: #1565c0; font-size: 3rem; margin: 0 0 10px 0;">💪</h1>
+          <h2 style="color: #1565c0; margin-top: 0;">Magaling, ${state.learnerName}!</h2>
+          <p style="font-size: 1.1rem; color: #333;">Nakuha mo ang <strong>${currentScore}</strong> sa quiz.</p>
+          <p style="font-size: 1rem; color: #666; margin-bottom: 20px;">Kailangan pa natin ng kaunting practice para mas bumilis at tumaas ang WCPM. Pwede mo subukan muli ang kwento!</p>
+          <button class="btn secondary" onclick="window.closeModal()" style="width: 100%; padding: 15px;">
+            Okay, naintindihan ko!
+          </button>
+        `;
+      }
+
+      document.getElementById('feedbackModalBox').innerHTML = modalHTML;
+      document.getElementById('feedbackModal').style.display = 'flex';
+    }, 500); // 500ms delay para matapos muna ang save
+  };
+
+  // 3. Function para isara ang Modal
+  window.closeModal = function() {
+    document.getElementById('feedbackModal').style.display = 'none';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // 4. Function para lumipat ng Stage
+  window.goToNextStageModal = function() {
+    document.getElementById('feedbackModal').style.display = 'none';
+    
+    dbGetAll('sessions').then(all => {
+      const rec = window.recommendNext(all);
+      const targetStage = rec.stage;
+      const nextPassage = state.passages.find(p => p.stage === targetStage && p.language === state.lang);
+      
+      if (nextPassage) {
+        document.getElementById('passageSelect').value = nextPassage.id;
+        loadPassage(nextPassage.id);
+        document.getElementById('learnerNameInput').value = state.learnerName; 
+        document.getElementById('status').textContent = `Welcome to Stage ${targetStage}! Tap "Play Model Read" to start.`;
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    });
+  };
+})();
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
+</script>
+</body>
+</html>
