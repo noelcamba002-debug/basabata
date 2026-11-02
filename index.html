@@ -1389,5 +1389,75 @@ function bindUI(){
     navigator.serviceWorker.register('sw.js');
   }
 </script>
+<script>
+// ==========================================
+// PATCH 13 & 14: GOOGLE SHEETS SYNC + FETCH
+// ==========================================
+(function() {
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycBxtuixFib7LTRtJAfIgsQ0t8VVvuWL_BEGEBnFLdSfycarT0yCRfxy_8adB8WQUcalDZQ/exec"; 
+
+  const prevSaveSession = window.saveSession;
+  window.saveSession = async function(compScore) {
+    await prevSaveSession(compScore);
+    const sessions = await dbGetAll('sessions');
+    sessions.sort((a, b) => b.timestamp - a.timestamp);
+    const latest = sessions[0];
+    if (!latest) return;
+
+    const payload = {
+      learner: latest.learner,
+      passage: latest.title,
+      attempt: latest.attempt,
+      wcpm: latest.coldWCPM,
+      accuracy: latest.coldAccuracy,
+      time: latest.coldDuration,
+      comprehension: latest.comprehensionScore + "/" + latest.comprehensionTotal
+    };
+    try {
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+    } catch (e) { console.log("Offline or error", e); }
+  };
+
+  const dashCard = document.querySelector('#dashView .card');
+  const cloudBtn = document.createElement('button');
+  cloudBtn.className = 'btn secondary';
+  cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
+  cloudBtn.style.marginLeft = '10px';
+  cloudBtn.onclick = async () => {
+    cloudBtn.innerHTML = '⏳ Fetching...';
+    try {
+      const res = await fetch(GOOGLE_SCRIPT_URL);
+      const cloudData = await res.json();
+      if(cloudData && cloudData.length > 0) {
+        const tbody = document.querySelector('#dashTable tbody');
+        tbody.innerHTML = '';
+        cloudData.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).forEach(s => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td style="font-weight:bold; color:#2e7d32;">${s.learner}</td>
+            <td style="text-align:center; background:#fff9c4;"><strong>#${s.attempt}</strong></td>
+            <td>${s.title}</td>
+            <td contenteditable="false">${s.coldAccuracy}</td>
+            <td contenteditable="false">${s.coldDuration}</td>
+            <td style="font-weight:bold; color:#1565c0;">${s.coldWCPM}</td>
+            <td>—</td>
+            <td>${s.comprehensionScore}/5</td>
+            <td>☁️</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      } else {
+        alert("Walang nakuha na record mula sa cloud.");
+      }
+    } catch (e) {
+      alert("Error fetching cloud data. Check internet connection.");
+    }
+    cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
+  };
+  dashCard.appendChild(cloudBtn);
+})();
+</script>
 </body>
 </html>
