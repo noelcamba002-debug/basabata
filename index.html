@@ -1459,31 +1459,58 @@ function bindUI(){
   };
   dashCard.appendChild(cloudBtn);
 })();
-</script>
-<script>
+</script> <!-- Ito yung pang-sara ng unang script -->
+
 <script>
 // ==========================================
-// PATCH 16: FINAL CLOUD FETCH FIX
+// PATCH 17: CLEAN & FINAL SYNC
 // ==========================================
 (function() {
-  const cloudBtns = document.querySelectorAll('.btn.secondary');
-  let cloudBtn = null;
-  cloudBtns.forEach(btn => {
-    if (btn.innerHTML.includes('Fetch Cloud')) {
-      cloudBtn = btn;
-      btn.style.marginLeft = '0';
-      btn.style.marginTop = '10px';
-      btn.style.width = '100%';
+  const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycBxtuixFib7LTRtJAfIgsQ0t8VVvuWL_BEGEBnFLdSfycarT0yCRfxy_8adB8WQUcalDZQ/exec";
+
+  // 1. PADALA SA GOOGLE SHEETS (POST)
+  const prevSaveSession = window.saveSession;
+  window.saveSession = async function(compScore) {
+    await prevSaveSession(compScore);
+    
+    try {
+      const sessions = await dbGetAll('sessions');
+      sessions.sort((a, b) => b.timestamp - a.timestamp);
+      const latest = sessions[0];
+      if (!latest) return;
+
+      const payload = {
+        learner: latest.learner,
+        passage: latest.title,
+        attempt: latest.attempt,
+        wcpm: latest.coldWCPM,
+        accuracy: latest.coldAccuracy,
+        time: latest.coldDuration,
+        comprehension: latest.comprehensionScore + "/" + latest.comprehensionTotal
+      };
+      
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST', 
+        mode: 'no-cors', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify(payload)
+      });
+      console.log("Data sent to Google Sheets!");
+    } catch (e) { 
+      console.log("Error sending to Google Sheets:", e); 
     }
-  });
+  };
 
-  if (!cloudBtn) return;
-
-    cloudBtn.onclick = async () => {
+  // 2. KUNIN ANG CLOUD DATA (GET)
+  const dashCard = document.querySelector('#dashView .card');
+  const cloudBtn = document.createElement('button');
+  cloudBtn.className = 'btn secondary';
+  cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
+  cloudBtn.style.marginTop = '10px';
+  cloudBtn.style.width = '100%';
+  
+  cloudBtn.onclick = async () => {
     cloudBtn.innerHTML = '⏳ Fetching...';
-    // PALITAN ITO NG BAGONG URL MULA SA HAKBANG 1
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/BAGONG_URL_MO/exec";
-
     try {
       const res = await fetch(GOOGLE_SCRIPT_URL);
       const cloudData = await res.json();
@@ -1508,25 +1535,16 @@ function bindUI(){
         });
         alert("✅ Successfully fetched cloud records!");
       } else {
-        alert("ℹ️ Walang record na nakuha. Magbasa muna ang isang bata at i-submit ang quiz.");
+        alert("ℹ️ Walang record na nakuha. Magbasa muna ang isang bata.");
       }
     } catch (e) {
       console.error(e);
-      alert("⚠️ Error sa internet connection o hindi pa naka-deploy nang tama ang Apps Script.");
+      alert("⚠️ Error sa internet o CORS. I-check kung 'Anyone' ang access sa Apps Script.");
     }
     cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
   };
-  tbody.appendChild(tr);
-        });
-        alert("✅ Successfully fetched cloud records!");
-      } else {
-        alert("ℹ️ Walang record na nakuha. Magbasa muna ang isang bata at i-submit ang quiz.");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("⚠️ Error sa internet connection o hindi pa naka-deploy nang tama ang Apps Script.");
-    }
-    cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
-  };
+  dashCard.appendChild(cloudBtn);
 })();
 </script>
+</body>
+</html>
