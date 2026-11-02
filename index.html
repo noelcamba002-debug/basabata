@@ -77,7 +77,11 @@ th{background:#f5f5f5}
       </div>
     </div>
 
-    <div class="card">
+    <div class="card" id="nameCard">
+      <!-- Name Input dito ilalagay ng JS -->
+    </div>
+
+    <div class="card" id="passageCard">
       <div id="passageText"></div>
       <div class="controls">
         <button class="btn" id="btnPlay">🔊 Play Model Read</button>
@@ -118,11 +122,14 @@ th{background:#f5f5f5}
 
   <section id="dashView" class="hidden">
     <div class="card">
+      <div style="margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 15px;">
+        <button class="btn secondary" id="btnBackHome" style="width: 100%; font-size: 1.1rem;">🏠 Back to Home</button>
+      </div>
       <h2 style="margin-top:0">Teacher Dashboard</h2>
       <p style="font-size:.9rem;color:#666">Sessions stored on this device. Tap any cell to edit. Export CSV for records.</p>
-      <div class="controls" style="flex-direction: column; align-items: stretch;">
+      <div class="controls" style="flex-direction: column; align-items: stretch; gap: 10px;">
         <button class="btn" id="btnExport">⬇ Export CSV</button>
-        <button class="btn secondary" id="cloudFetchBtn" onclick="fetchCloud()" style="display:none;">☁️ Fetch Cloud Records</button>
+        <button class="btn secondary" id="cloudFetchBtn" onclick="fetchCloud()">☁️ Fetch Cloud Records</button>
         <button class="btn ghost" id="btnClear">🗑 Clear All Data</button>
       </div>
     </div>
@@ -192,6 +199,7 @@ let isTimerRunning = false;
 (async function init(){
   try{await openDB()}catch(e){console.warn('DB unavailable',e)}
   await restoreSettings();
+  buildNameInput(); // Inilipat sa labas para malinis
   buildPassageSelect();
   bindUI();
   populateVoices();
@@ -208,6 +216,20 @@ function applyVisualSettings(){
   document.body.classList.toggle('dyslexic',state.dyslexic);
   document.body.classList.toggle('high-contrast',state.highContrast);
   document.getElementById('btnLang').textContent=state.lang.toUpperCase();
+}
+
+function buildNameInput() {
+  const nameDiv = document.getElementById('nameCard');
+  nameDiv.innerHTML = `
+    <label for="learnerNameInput" style="font-weight: bold; color: #1565c0;">👦 Pangalan ng Bata:</label>
+    <input type="text" id="learnerNameInput" placeholder="I-type ang pangalan dito..." style="flex: 1; min-width: 200px; padding: 10px; border: 2px solid #1565c0; border-radius: 6px; font-size: 1rem; width: 100%; margin-top: 10px;" />
+  `;
+  const nameInput = document.getElementById('learnerNameInput');
+  nameInput.value = state.learnerName === 'Learner' ? '' : state.learnerName;
+  nameInput.addEventListener('input', (e) => {
+    state.learnerName = e.target.value.trim() || 'Learner';
+    saveSetting('learnerName', state.learnerName);
+  });
 }
 
 function buildPassageSelect(){
@@ -710,38 +732,10 @@ function bindUI(){
     }
   };
 
-  // Name Input logic
-  const passageCard = document.querySelector('#passageText').closest('.card');
-  const nameDiv = document.createElement('div');
-  nameDiv.style.cssText = "margin-bottom: 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #e3f2fd; padding: 12px; border-radius: 8px;";
-  nameDiv.innerHTML = `
-    <label for="learnerNameInput" style="font-weight: bold; color: #1565c0;">👦 Pangalan ng Bata:</label>
-    <input type="text" id="learnerNameInput" placeholder="I-type ang pangalan dito..." style="flex: 1; min-width: 200px; padding: 10px; border: 2px solid #1565c0; border-radius: 6px; font-size: 1rem;" />
-  `;
-  passageCard.insertBefore(nameDiv, document.getElementById('passageText'));
-
-  const nameInput = document.getElementById('learnerNameInput');
-  nameInput.value = state.learnerName === 'Learner' ? '' : state.learnerName;
-  nameInput.addEventListener('input', (e) => {
-    state.learnerName = e.target.value.trim() || 'Learner';
-    saveSetting('learnerName', state.learnerName);
-  });
-
-  // Back to Home logic
-  const dashCard = document.querySelector('#dashView .card');
-  const navDiv = document.createElement('div');
-  navDiv.style.cssText = "margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 15px;";
-  const backBtn = document.createElement('button');
-  backBtn.className = 'btn secondary';
-  backBtn.innerHTML = '🏠 Back to Home';
-  backBtn.style.width = '100%';
-  backBtn.style.fontSize = '1.1rem';
-  backBtn.onclick = () => {
+  document.getElementById('btnBackHome').onclick = () => {
     document.getElementById('dashView').classList.add('hidden');
     document.getElementById('learnerView').classList.remove('hidden');
   };
-  navDiv.appendChild(backBtn);
-  dashCard.insertBefore(navDiv, dashCard.firstChild);
 
   // Modal Container
   const modalOverlay = document.createElement('div');
@@ -813,6 +807,11 @@ window.fetchCloud = async function() {
   }
   cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
 };
+</script>
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js');
+  }
 </script>
 </body>
 </html>
