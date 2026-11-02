@@ -1479,12 +1479,13 @@ function bindUI(){
 
   if (!cloudBtn) return;
 
-  cloudBtn.onclick = async () => {
+    cloudBtn.onclick = async () => {
     cloudBtn.innerHTML = '⏳ Fetching...';
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycBxtuixFib7LTRtJAfIgsQ0t8VVvuWL_BEGEBnFLdSfycarT0yCRfxy_8adB8WQUcalDZQ/exec";
+    // PALITAN ITO NG BAGONG URL MULA SA HAKBANG 1
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/BAGONG_URL_MO/exec";
 
     try {
-      const res = await fetch(GOOGLE_SCRIPT_URL); // Normal fetch na dahil may CORS na
+      const res = await fetch(GOOGLE_SCRIPT_URL);
       const cloudData = await res.json();
       
       if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
@@ -1504,6 +1505,18 @@ function bindUI(){
             <td>☁️</td>
           `;
           tbody.appendChild(tr);
+        });
+        alert("✅ Successfully fetched cloud records!");
+      } else {
+        alert("ℹ️ Walang record na nakuha. Magbasa muna ang isang bata at i-submit ang quiz.");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("⚠️ Error sa internet connection o hindi pa naka-deploy nang tama ang Apps Script.");
+    }
+    cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
+  };
+  tbody.appendChild(tr);
         });
         alert("✅ Successfully fetched cloud records!");
       } else {
