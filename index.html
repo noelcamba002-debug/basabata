@@ -1431,12 +1431,14 @@ function bindUI(){
 
   // 2. KUNIN ANG CLOUD DATA (GET)
   const dashCard = document.querySelector('#dashView .card');
+  // I-check kung may existing button na, kung meron, huwag nang gumawa ng bago
+if (document.getElementById('cloudFetchBtn')) return;
   const cloudBtn = document.createElement('button');
   cloudBtn.className = 'btn secondary';
   cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
   cloudBtn.style.marginTop = '10px';
   cloudBtn.style.width = '100%';
-  
+  cloudBtn.id = 'cloudFetchBtn';
   cloudBtn.onclick = async () => {
     cloudBtn.innerHTML = '⏳ Fetching...';
     try {
