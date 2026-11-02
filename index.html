@@ -512,8 +512,10 @@ function submitQuiz(){
 }
 
 async function saveSession(compScore){
-  const cold=state.coldRead||{wcpm:0,accuracy:0,durationSec:0,total:0};
-  const warm=state.warmRead||null;
+  // Kunin ang tamang data mula sa screen (hindi na sa lumang timer)
+  const coldWCPM = parseInt(document.getElementById('statWCPM').textContent) || 0;
+  const coldAcc = parseInt(document.getElementById('statAcc').textContent) || 0;
+  const coldTime = parseInt(document.getElementById('statTime').textContent) || 0;
   
   const allSessions = await dbGetAll('sessions');
   const learnerSessions = allSessions.filter(s => s.learner === state.learnerName && s.passageId === state.current.id);
@@ -526,17 +528,18 @@ async function saveSession(compScore){
     attempt:attemptNum,
     stage:state.current.stage,
     language:state.current.language,
-    coldWCPM:cold.wcpm,
-    coldAccuracy:cold.accuracy,
-    coldDuration:cold.durationSec,
-    totalWords:cold.total || state.current.text.split(' ').length,
-    warmWCPM:warm?warm.wcpm:null,
-    warmAccuracy:warm?warm.accuracy:null,
-    warmDuration:warm?warm.durationSec:null,
+    coldWCPM: coldWCPM,
+    coldAccuracy: coldAcc,
+    coldDuration: coldTime,
+    totalWords: state.current.text.split(' ').length,
+    warmWCPM: state.warmRead ? state.warmRead.wcpm : null,
+    warmAccuracy: state.warmRead ? state.warmRead.accuracy : null,
+    warmDuration: state.warmRead ? state.warmRead.durationSec : null,
     comprehensionScore:compScore,
     comprehensionTotal:state.current.questions.length,
     timestamp:Date.now()
   };
+  
   await dbPut('sessions',session);
   document.getElementById('status').textContent=`✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
 
@@ -559,7 +562,6 @@ async function saveSession(compScore){
     console.log("Sync success");
   } catch (e) { console.log("Sync error:", e); }
 }
-
 function recommendNext(sessions){
   if(!sessions.length)return{stage:1,message:'Start at Stage 1.'};
   const sorted=sessions.slice().sort((a,b)=>b.timestamp-a.timestamp);
