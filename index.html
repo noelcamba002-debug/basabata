@@ -1481,24 +1481,15 @@ function bindUI(){
 
   cloudBtn.onclick = async () => {
     cloudBtn.innerHTML = '⏳ Fetching...';
-    // Idinagdag natin ang ?callback=myCallback sa dulo ng URL para ma-bypass ang CORS
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycBxtuixFib7LTRtJAfIgsQ0t8VVvuWL_BEGEBnFLdSfycarT0yCRfxy_8adB8WQUcalDZQ/exec?callback=myCallback";
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycBxtuixFib7LTRtJAfIgsQ0t8VVvuWL_BEGEBnFLdSfycarT0yCRfxy_8adB8WQUcalDZQ/exec";
 
     try {
-      const res = await fetch(GOOGLE_SCRIPT_URL);
-      const text = await res.text(); // Kunin muna as text dahil naka-JSONP wrapper
-      
-      // Linisin ang JSONP wrapper para makuha ang totoong JSON
-      const jsonStart = text.indexOf('(') + 1;
-      const jsonEnd = text.lastIndexOf(')');
-      const jsonString = text.substring(jsonStart, jsonEnd);
-      
-      const cloudData = JSON.parse(jsonString);
+      const res = await fetch(GOOGLE_SCRIPT_URL); // Normal fetch na dahil may CORS na
+      const cloudData = await res.json();
       
       if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
         const tbody = document.querySelector('#dashTable tbody');
         tbody.innerHTML = '';
-        
         cloudData.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).forEach(s => {
           const tr = document.createElement('tr');
           tr.innerHTML = `
@@ -1516,11 +1507,11 @@ function bindUI(){
         });
         alert("✅ Successfully fetched cloud records!");
       } else {
-        alert("ℹ️ Walang record na nakuha. Magbasa muna ang isang bata at i-submit ang quiz para may maitala.");
+        alert("ℹ️ Walang record na nakuha. Magbasa muna ang isang bata at i-submit ang quiz.");
       }
     } catch (e) {
       console.error(e);
-      alert("⚠️ Error sa internet connection o hindi pa naka-deploy nang tama ang Apps Script. Check your setup.");
+      alert("⚠️ Error sa internet connection o hindi pa naka-deploy nang tama ang Apps Script.");
     }
     cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
   };
