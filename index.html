@@ -1395,16 +1395,18 @@ function bindUI(){
 </script>
 <script>
 // ==========================================
-// PATCH 17: CLEAN & FINAL SYNC
+<script>
+// ==========================================
+// PATCH 17: FINAL GOOGLE SHEETS SYNC
 // ==========================================
 (function() {
+  // PALITAN ITO NG URL MULA SA APPS SCRIPT MO
   const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycBxtuixFib7LTRtJAfIgsQ0t8VVvuWL_BEGEBnFLdSfycarT0yCRfxy_8adB8WQUcalDZQ/exec";
 
-  // 1. PADALA SA GOOGLE SHEETS (POST)
+  // 1. MAGPADALA NG DATA SA GOOGLE SHEETS
   const prevSaveSession = window.saveSession;
   window.saveSession = async function(compScore) {
     await prevSaveSession(compScore);
-    
     try {
       const sessions = await dbGetAll('sessions');
       sessions.sort((a, b) => b.timestamp - a.timestamp);
@@ -1421,28 +1423,27 @@ function bindUI(){
         comprehension: latest.comprehensionScore + "/" + latest.comprehensionTotal
       };
       
-      await fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST', 
-        mode: 'no-cors', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify(payload)
+      // Gagamit tayo ng URLSearchParams para i-bypass ang CORS
+      const queryString = new URLSearchParams(payload).toString();
+      await fetch(GOOGLE_SCRIPT_URL + "?" + queryString, {
+        method: 'GET', mode: 'no-cors'
       });
-      console.log("Data sent to Google Sheets!");
     } catch (e) { 
-      console.log("Error sending to Google Sheets:", e); 
+      console.log("Sync error:", e); 
     }
   };
 
-  // 2. KUNIN ANG CLOUD DATA (GET)
+  // 2. FETCH BUTTON PARA SA DASHBOARD
+  if (document.getElementById('cloudFetchBtn')) return;
+
   const dashCard = document.querySelector('#dashView .card');
-  // I-check kung may existing button na, kung meron, huwag nang gumawa ng bago
-if (document.getElementById('cloudFetchBtn')) return;
   const cloudBtn = document.createElement('button');
+  cloudBtn.id = 'cloudFetchBtn';
   cloudBtn.className = 'btn secondary';
   cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
   cloudBtn.style.marginTop = '10px';
   cloudBtn.style.width = '100%';
-  cloudBtn.id = 'cloudFetchBtn';
+  
   cloudBtn.onclick = async () => {
     cloudBtn.innerHTML = '⏳ Fetching...';
     try {
