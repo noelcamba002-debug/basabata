@@ -120,14 +120,15 @@ th{background:#f5f5f5}
     <div class="card">
       <h2 style="margin-top:0">Teacher Dashboard</h2>
       <p style="font-size:.9rem;color:#666">Sessions stored on this device. Tap any cell to edit. Export CSV for records.</p>
-      <div class="controls">
+      <div class="controls" style="flex-direction: column; align-items: stretch;">
         <button class="btn" id="btnExport">⬇ Export CSV</button>
-        <button class="btn ghost" id="btnClear" style="margin-left:auto">🗑 Clear All Data</button>
+        <button class="btn secondary" id="cloudFetchBtn" onclick="fetchCloud()" style="display:none;">☁️ Fetch Cloud Records</button>
+        <button class="btn ghost" id="btnClear">🗑 Clear All Data</button>
       </div>
     </div>
     <div class="card">
       <table id="dashTable">
-        <thead><tr><th>Learner</th><th>Passage</th><th>Cold WCPM</th><th>Warm WCPM</th><th>Acc %</th><th>Comp</th><th>Date</th><th></th></tr></thead>
+        <thead><tr><th>Learner</th><th>Attempt</th><th>Passage</th><th>Acc %</th><th>Time (s)</th><th>WCPM</th><th>Warm WCPM</th><th>Comp</th><th></th></tr></thead>
         <tbody></tbody>
       </table>
       <p id="dashEmpty" style="color:#888;text-align:center;padding:20px">No sessions yet.</p>
@@ -135,7 +136,8 @@ th{background:#f5f5f5}
   </section>
 </main>
 
-<script>const PASSAGES=[
+<script>
+const PASSAGES=[
 {id:"S1_EN_01",stage:1,language:"en",pairedId:"S1_FIL_01",title:"Mara's Morning",text:"Mara woke up early. She saw the sun. She put on her uniform. She ate bread and drank milk. Her mother gave her a bag. Mara walked to school. She met her friend Ana. They went in together.",questions:[
 {type:"literal",q:"When did Mara wake up?",options:["Late","Early","At noon","At night"],answer:1},
 {type:"literal",q:"What did Mara eat?",options:["Rice","Bread","Fruit","Egg"],answer:1},
@@ -181,7 +183,13 @@ function dbGetAll(s){return new Promise((res,rej)=>{const t=db.transaction(s,'re
 function dbClear(s){return new Promise((res,rej)=>{const t=db.transaction(s,'readwrite'),r=t.objectStore(s).clear();r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
 function dbDelete(s,id){return new Promise((res,rej)=>{const t=db.transaction(s,'readwrite'),r=t.objectStore(s).delete(id);r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
 
-const state={passages:PASSAGES.slice(),current:null,lang:'en',fontSize:1,dyslexic:false,highContrast:false,learnerName:'Learner',coldRead:null,warmRead:null,quizAnswers:[],wordEls:[],passageWords:[],lastAlignment:null};(async function init(){
+const state={passages:PASSAGES.slice(),current:null,lang:'en',fontSize:1,dyslexic:false,highContrast:false,learnerName:'Learner',coldRead:null,warmRead:null,quizAnswers:[],wordEls:[],passageWords:[],lastAlignment:null};
+
+let timerInterval = null;
+let exactSeconds = 0;
+let isTimerRunning = false;
+
+(async function init(){
   try{await openDB()}catch(e){console.warn('DB unavailable',e)}
   await restoreSettings();
   buildPassageSelect();
@@ -220,6 +228,7 @@ function loadPassage(id){
   document.getElementById('statsCard').classList.add('hidden');
   document.getElementById('quizResult').innerHTML='';
   document.getElementById('status').textContent='Tap "Play Model Read" to hear the passage, then "Read Now".';
+  document.getElementById('learnerNameInput').value = state.learnerName === 'Learner' ? '' : state.learnerName;
 }
 function renderPassage(text){
   const c=document.getElementById('passageText');c.innerHTML='';
@@ -289,7 +298,7 @@ const asr={recognition:null,listening:false,transcript:'',startTime:0,
     const r=this.init();if(!r){onError&&onError('Speech recognition not supported.');return}
     this.recognition=r;this.transcript='';this.startTime=performance.now();
     r.onresult=e=>{let int='',fin='';for(let i=e.resultIndex;i<e.results.length;i++){const t=e.results[i][0].transcript;if(e.results[i].isFinal)fin+=t+' ';else int+=t}if(fin)this.transcript+=fin;onResult&&onResult(this.transcript+int)};
-    r.onend=()=>{this.listening=false;const d=(performance.now()-this.startTime)/1000;onEnd&&onEnd(this.transcript.trim(),d)};
+    r.onend=()=>{this.listening=false;onEnd&&onEnd(this.transcript.trim(), exactSeconds)};
     r.onerror=e=>{this.listening=false;onError&&onError(e.error)};
     this.listening=true;r.start();
   },
@@ -347,15 +356,33 @@ function startReadNow(){
   document.getElementById('status').textContent='🎤 Listening… read aloud now. Tap "Stop Reading" when done.';
   const btn=document.getElementById('btnRecord');
   btn.textContent='⏹ Stop Reading';
+  
+  exactSeconds = 0;
+  isTimerRunning = true;
+  if(timerInterval) clearInterval(timerInterval);
+  timerInterval = setInterval(() => {
+    if(isTimerRunning) {
+      exactSeconds++;
+      const m = String(Math.floor(exactSeconds / 60)).padStart(2, '0');
+      const s = String(exactSeconds % 60).padStart(2, '0');
+      btn.innerHTML = `⏹ Stop Reading (⏱️ ${m}:${s})`;
+    }
+  }, 1000);
+  btn.innerHTML = `⏹ Stop Reading (⏱️ 00:00)`;
+
   asr.start(
     interim=>{document.getElementById('status').textContent='🎤 Listening… '+(interim.slice(-60)||'…')},
     (finalTranscript,duration)=>{
-      btn.textContent='🎤 Read Now';
+      isTimerRunning = false;
+      if(timerInterval) clearInterval(timerInterval);
+      btn.innerHTML='🎤 Read Now';
       finishRead(finalTranscript,duration);
     },
     err=>{
-      btn.textContent='🎤 Read Now';
-      document.getElementById('status').textContent='⚠️ Mic error: '+err+'. You can still answer comprehension questions, or have the teacher score manually.';
+      isTimerRunning = false;
+      if(timerInterval) clearInterval(timerInterval);
+      btn.innerHTML='🎤 Read Now';
+      document.getElementById('status').textContent='⚠️ Mic error: '+err+'. You can still answer comprehension questions.';
     }
   );
 }
@@ -427,31 +454,98 @@ function submitQuiz(){
   document.getElementById('statComp').textContent=correct+'/'+questions.length;
   document.getElementById('quizResult').innerHTML='<strong>Score: '+correct+'/'+questions.length+'</strong><br>Literal: '+byType.literal+'/'+typeTotal.literal+' · Inferential: '+byType.inferential+'/'+typeTotal.inferential+' · Critical: '+byType.critical+'/'+typeTotal.critical;
   saveSession(correct);
+  
+  // Show feedback modal
+  setTimeout(async () => {
+    const sessions = await dbGetAll('sessions');
+    const rec = recommendNext(sessions);
+    const isMastery = rec.message.includes('Mastery') || rec.message.includes('Ready');
+    const currentScore = correct + "/" + questions.length;
+    let modalHTML = '';
+    
+    if (isMastery) {
+      modalHTML = `
+        <h1 style="color: #2e7d32; font-size: 3rem; margin: 0 0 10px 0;">🌟</h1>
+        <h2 style="color: #2e7d32; margin-top: 0;">Napakagaling, ${state.learnerName}!</h2>
+        <p style="font-size: 1.2rem; color: #333;">Nakuha mo ang <strong>${currentScore}</strong> sa quiz at umabot ka sa target na bilis!</p>
+        <p style="font-size: 1.1rem; color: #1565c0; font-weight: bold; margin-bottom: 20px;">Handa ka na para sa susunod na antas!</p>
+        <button class="btn" onclick="window.goToNextStageModal()" style="background: #f9a825; font-size: 1.2rem; width: 100%; padding: 15px;">
+          🚀 Magpatuloy sa Stage ${rec.stage}
+        </button>
+      `;
+    } else {
+      modalHTML = `
+        <h1 style="color: #1565c0; font-size: 3rem; margin: 0 0 10px 0;">💪</h1>
+        <h2 style="color: #1565c0; margin-top: 0;">Magaling, ${state.learnerName}!</h2>
+        <p style="font-size: 1.1rem; color: #333;">Nakuha mo ang <strong>${currentScore}</strong> sa quiz.</p>
+        <p style="font-size: 1rem; color: #666; margin-bottom: 20px;">Kailangan pa natin ng kaunting practice para mas bumilis at tumaas ang WCPM.</p>
+        <button class="btn secondary" onclick="window.closeModal()" style="width: 100%; padding: 15px;">
+          Okay, naintindihan ko!
+        </button>
+      `;
+    }
+    document.getElementById('feedbackModalBox').innerHTML = modalHTML;
+    document.getElementById('feedbackModal').style.display = 'flex';
+  }, 500);
 }
 
 async function saveSession(compScore){
-  const cold=state.coldRead||{wcpm:0,accuracy:0,durationSec:0};
+  const cold=state.coldRead||{wcpm:0,accuracy:0,durationSec:0,total:0};
   const warm=state.warmRead||null;
+  
+  const allSessions = await dbGetAll('sessions');
+  const learnerSessions = allSessions.filter(s => s.learner === state.learnerName && s.passageId === state.current.id);
+  const attemptNum = learnerSessions.length + 1;
+
   const session={
     learner:state.learnerName,
     passageId:state.current.id,
+    title:state.current.title,
+    attempt:attemptNum,
     stage:state.current.stage,
     language:state.current.language,
-    title:state.current.title,
     coldWCPM:cold.wcpm,
     coldAccuracy:cold.accuracy,
+    coldDuration:cold.durationSec,
+    totalWords:cold.total || state.current.text.split(' ').length,
     warmWCPM:warm?warm.wcpm:null,
     warmAccuracy:warm?warm.accuracy:null,
+    warmDuration:warm?warm.durationSec:null,
     comprehensionScore:compScore,
     comprehensionTotal:state.current.questions.length,
     timestamp:Date.now()
   };
   await dbPut('sessions',session);
-  document.getElementById('status').textContent='✅ Session saved. Progress recorded.';
-}function recommendNext(sessions){
+  document.getElementById('status').textContent=`✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
+
+  // GOOGLE SHEETS SYNC
+  try {
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycBxtuixFib7LTRtJAfIgsQ0t8VVvuWL_BEGEBnFLdSfycarT0yCRfxy_8adB8WQUcalDZQ/exec";
+    const payload = {
+      learner: session.learner,
+      passage: session.title,
+      attempt: session.attempt,
+      wcpm: session.coldWCPM,
+      accuracy: session.coldAccuracy,
+      time: session.coldDuration,
+      comprehension: session.comprehensionScore + "/" + session.comprehensionTotal
+    };
+    const queryString = new URLSearchParams(payload).toString();
+    await fetch(GOOGLE_SCRIPT_URL + "?" + queryString, {
+      method: 'GET', mode: 'no-cors'
+    });
+    console.log("Sync success");
+  } catch (e) { console.log("Sync error:", e); }
+}
+
+function recommendNext(sessions){
   if(!sessions.length)return{stage:1,message:'Start at Stage 1.'};
   const sorted=sessions.slice().sort((a,b)=>b.timestamp-a.timestamp);
   const currentStage=sorted[0].stage;
+  const latest = sorted[0];
+  const isMastery = latest.coldAccuracy >= 95 && latest.comprehensionScore >= 4 && latest.coldWCPM >= 60;
+  if(isMastery && currentStage < 3) return{stage:currentStage+1,message:`🎉 Napakagaling! Mastery level. Ready for Stage ${currentStage+1}!`};
+  
   const sameStage=sorted.filter(s=>s.stage===currentStage).slice(0,2);
   const passing=sameStage.length===2&&sameStage.every(s=>
     Math.max(s.coldAccuracy,s.warmAccuracy||0)>=90 &&
@@ -471,21 +565,38 @@ async function renderDashboard(){
 
   sessions.sort((a,b)=>b.timestamp-a.timestamp).forEach(s=>{
     const tr=document.createElement('tr');
-    tr.innerHTML='<td contenteditable="true" data-field="learner">'+s.learner+'</td>'+
-      '<td>'+s.title+'</td>'+
-      '<td contenteditable="true" data-field="coldWCPM">'+s.coldWCPM+'</td>'+
-      '<td contenteditable="true" data-field="warmWCPM">'+(s.warmWCPM??'—')+'</td>'+
-      '<td contenteditable="true" data-field="coldAccuracy">'+s.coldAccuracy+'</td>'+
-      '<td contenteditable="true" data-field="comprehensionScore">'+s.comprehensionScore+'/'+s.comprehensionTotal+'</td>'+
-      '<td>'+new Date(s.timestamp).toLocaleDateString()+'</td>'+
-      '<td><button class="btn ghost" style="padding:6px 10px" data-del="'+s.id+'">✕</button></td>';
+    tr.innerHTML=`
+      <td contenteditable="true" data-field="learner" style="font-weight:bold; color:#2e7d32;">${s.learner}</td>
+      <td style="text-align:center; background:#fff9c4;"><strong>#${s.attempt || 1}</strong></td>
+      <td>${s.title}</td>
+      <td contenteditable="true" data-field="coldAccuracy" style="background:#e3f2fd; font-weight:bold;">${s.coldAccuracy}</td>
+      <td contenteditable="true" data-field="coldDuration" style="background:#e3f2fd;">${s.coldDuration || 0}</td>
+      <td contenteditable="false" data-field="coldWCPM" style="background:#f5f5f5; font-weight:bold; color:#1565c0;">${s.coldWCPM}</td>
+      <td>${s.warmWCPM ?? '—'}</td>
+      <td contenteditable="true" data-field="comprehensionScore">${s.comprehensionScore}/${s.comprehensionTotal}</td>
+      <td><button class="btn ghost" style="padding:6px 10px" data-del="${s.id}">✕</button></td>
+    `;
     tr.querySelectorAll('[contenteditable]').forEach(td=>{
+      td.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); td.blur(); } };
       td.onblur=async()=>{
         const field=td.dataset.field;
-        let val=td.textContent.trim();
-        if(field==='comprehensionScore'){const parts=val.split('/');s.comprehensionScore=parseInt(parts[0])||0}
-        else if(field!=='learner'){s[field]=parseInt(val)||0}
-        else{s.learner=val}
+        const textVal = td.textContent.replace(/\s+/g, '').trim();
+        if(field==='comprehensionScore'){const parts=textVal.split('/');s.comprehensionScore=parseInt(parts[0])||0; td.textContent = s.comprehensionScore + '/' + s.comprehensionTotal;}
+        else if(field!=='learner'){s[field]=parseInt(textVal)||0; td.textContent = s[field];}
+        else{s.learner=td.textContent.trim();}
+
+        if (field === 'coldAccuracy' || field === 'coldDuration') {
+          if (s.totalWords && s.coldDuration > 0) {
+            const correctWords = (s.coldAccuracy / 100) * s.totalWords;
+            s.coldWCPM = Math.round((correctWords / s.coldDuration) * 60);
+            const wcpmCell = tr.querySelector('[data-field="coldWCPM"]');
+            if (wcpmCell) {
+              wcpmCell.textContent = s.coldWCPM;
+              wcpmCell.style.backgroundColor = '#c8e6c9';
+              setTimeout(() => wcpmCell.style.backgroundColor = '#f5f5f5', 800);
+            }
+          }
+        }
         await dbPut('sessions',s);
       };
     });
@@ -524,12 +635,17 @@ function bindUI(){
   };
 
   document.getElementById('btnDash').onclick=()=>{
-    const dash=document.getElementById('dashView');
-    const learner=document.getElementById('learnerView');
-    const showing=!dash.classList.contains('hidden');
-    dash.classList.toggle('hidden',showing);
-    learner.classList.toggle('hidden',!showing);
-    if(!showing)renderDashboard();
+    const pin = prompt("🔒 Teacher Access Only.\nI-type ang 4-digit PIN:");
+    if(pin === "1234") {
+      const dash=document.getElementById('dashView');
+      const learner=document.getElementById('learnerView');
+      const showing=!dash.classList.contains('hidden');
+      dash.classList.toggle('hidden',showing);
+      learner.classList.toggle('hidden',!showing);
+      if(!showing)renderDashboard();
+    } else if (pin !== null) {
+      alert("❌ Mali ang PIN. Access Denied.");
+    }
   };
 
   document.getElementById('btnDys').onclick=()=>{
@@ -593,15 +709,8 @@ function bindUI(){
       renderDashboard();
     }
   };
-}
-</script>
-</body>
-</html><script>
-// ==========================================
-// PATCH: LEARNER NAME & ATTEMPT TRACKER
-// ==========================================
-(function() {
-  // 1. I-inject ang Name Input sa taas ng passage card
+
+  // Name Input logic
   const passageCard = document.querySelector('#passageText').closest('.card');
   const nameDiv = document.createElement('div');
   nameDiv.style.cssText = "margin-bottom: 15px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: #e3f2fd; padding: 12px; border-radius: 8px;";
@@ -611,7 +720,6 @@ function bindUI(){
   `;
   passageCard.insertBefore(nameDiv, document.getElementById('passageText'));
 
-  // I-load ang huling pangalan na ginamit
   const nameInput = document.getElementById('learnerNameInput');
   nameInput.value = state.learnerName === 'Learner' ? '' : state.learnerName;
   nameInput.addEventListener('input', (e) => {
@@ -619,867 +727,92 @@ function bindUI(){
     saveSetting('learnerName', state.learnerName);
   });
 
-  // 2. I-override ang saveSession para maisama ang Attempt Number
-    const prevSaveSession = window.saveSession;
-  window.saveSession = async function(compScore) {
-    await prevSaveSession(compScore);
-    
-    try {
-      const sessions = await dbGetAll('sessions');
-      sessions.sort((a, b) => b.timestamp - a.timestamp);
-      const latest = sessions[0];
-      if (!latest) return;
-
-      // Gagamit tayo ng Form Data (URLSearchParams) imbes na JSON
-      const formData = new URLSearchParams();
-      formData.append('learner', latest.learner);
-      formData.append('passage', latest.title);
-      formData.append('attempt', latest.attempt);
-      formData.append('wcpm', latest.coldWCPM);
-      formData.append('accuracy', latest.coldAccuracy);
-      formData.append('time', latest.coldDuration);
-      formData.append('comprehension', latest.comprehensionScore + "/" + latest.comprehensionTotal);
-      
-      await fetch(GOOGLE_SCRIPT_URL, {
-        method: 'POST', 
-        mode: 'no-cors', 
-        body: formData // Hindi na JSON, formData na
-      });
-      console.log("Data sent to Google Sheets!");
-    } catch (e) { 
-      console.log("Error sending to Google Sheets:", e); 
-    }
-  };
-    await dbPut('sessions', session);
-    document.getElementById('status').textContent = `✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
-  };
-
-  // 3. I-update ang Teacher Dashboard table para may Attempt column
-  const originalRenderDashboard = renderDashboard;
-  window.renderDashboard = async function() {
-    const sessions = await dbGetAll('sessions');
-    const tbody = document.querySelector('#dashTable tbody');
-    tbody.innerHTML = '';
-    
-    // Ayusin ang table headers para may Attempt
-    const theadRow = document.querySelector('#dashTable thead tr');
-    if(!theadRow.innerHTML.includes('Attempt')) {
-      theadRow.innerHTML = '<th>Learner</th><th>Attempt</th><th>Passage</th><th>Cold WCPM</th><th>Warm WCPM</th><th>Acc %</th><th>Comp</th><th>Date</th><th></th>';
-    }
-
-    document.getElementById('dashEmpty').classList.toggle('hidden', sessions.length > 0);
-
-    sessions.sort((a, b) => b.timestamp - a.timestamp).forEach(s => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td contenteditable="true" data-field="learner" style="font-weight:bold; color:#2e7d32;">${s.learner}</td>
-        <td style="text-align:center; background:#fff9c4;"><strong>#${s.attempt || 1}</strong></td>
-        <td>${s.title}</td>
-        <td contenteditable="true" data-field="coldWCPM">${s.coldWCPM}</td>
-        <td contenteditable="true" data-field="warmWCPM">${s.warmWCPM ?? '—'}</td>
-        <td contenteditable="true" data-field="coldAccuracy">${s.coldAccuracy}</td>
-        <td contenteditable="true" data-field="comprehensionScore">${s.comprehensionScore}/${s.comprehensionTotal}</td>
-        <td>${new Date(s.timestamp).toLocaleDateString()}</td>
-        <td><button class="btn ghost" style="padding:6px 10px" data-del="${s.id}">✕</button></td>
-      `;
-      
-      tr.querySelectorAll('[contenteditable]').forEach(td => {
-        td.onblur = async () => {
-          const field = td.dataset.field;
-          let val = td.textContent.trim();
-          if (field === 'comprehensionScore') {
-            const parts = val.split('/');
-            s.comprehensionScore = parseInt(parts[0]) || 0;
-          } else if (field !== 'learner') {
-            s[field] = parseInt(val) || 0;
-          } else {
-            s.learner = val;
-          }
-          await dbPut('sessions', s);
-        };
-      });
-      
-      tr.querySelector('[data-del]').onclick = async () => {
-        await dbDelete('sessions', s.id);
-        renderDashboard();
-      };
-      tbody.appendChild(tr);
-    });
-    
-    // I-render ang recommendation banner
-    if (sessions.length) {
-      const rec = recommendNext(sessions);
-      const oldBanner = document.getElementById('recBanner');
-      if (oldBanner) oldBanner.remove();
-      
-      const banner = document.createElement('div');
-      banner.id = 'recBanner';
-      banner.style.cssText = 'background:#e8f5e9;padding:12px;border-radius:10px;margin:12px 0;font-weight:600';
-      banner.textContent = rec.message;
-      document.querySelector('#dashView .card:last-child').prepend(banner);
-    }
-  };
-})();
-</script>
-</body>
-</html><script>
-// ==========================================
-// PATCH 2: DASHBOARD TO HOME NAVIGATION
-// ==========================================
-(function() {
-  // 1. Maglagay ng "Back to Home" button sa loob ng Dashboard
+  // Back to Home logic
   const dashCard = document.querySelector('#dashView .card');
-  
-  // Gumawa ng container para sa button
   const navDiv = document.createElement('div');
   navDiv.style.cssText = "margin-bottom: 15px; border-bottom: 2px solid #eee; padding-bottom: 15px;";
-  
-  // Gumawa ng button
   const backBtn = document.createElement('button');
-  backBtn.className = 'btn secondary'; // Asul na button
+  backBtn.className = 'btn secondary';
   backBtn.innerHTML = '🏠 Back to Home';
   backBtn.style.width = '100%';
   backBtn.style.fontSize = '1.1rem';
-  
-  // Idagdag ang logic para bumalik sa Home
   backBtn.onclick = () => {
     document.getElementById('dashView').classList.add('hidden');
     document.getElementById('learnerView').classList.remove('hidden');
   };
-  
-  // Isaksak ang button sa taas ng Dashboard card
   navDiv.appendChild(backBtn);
   dashCard.insertBefore(navDiv, dashCard.firstChild);
-})();
-</script>
-</body>
-</html><script>
-// ==========================================
-// PATCH 3: AUTO-COMPUTE WCPM ON ACCURACY EDIT
-// ==========================================
-(function() {
-  // 1. I-override ang pag-save ng session para maitala ang total words at duration
-  const prevSaveSession = window.saveSession;
-  window.saveSession = async function(compScore) {
-    const allSessions = await dbGetAll('sessions');
-    const learnerSessions = allSessions.filter(s => s.learner === state.learnerName && s.passageId === state.current.id);
-    const attemptNum = learnerSessions.length + 1;
-    const cold = state.coldRead || {wcpm:0,accuracy:0,durationSec:0,total:0};
-    const warm = state.warmRead || null;
 
-    const session = {
-      learner: state.learnerName,
-      passageId: state.current.id,
-      title: state.current.title,
-      attempt: attemptNum,
-      stage: state.current.stage,
-      language: state.current.language,
-      coldWCPM: cold.wcpm,
-      coldAccuracy: cold.accuracy,
-      coldDuration: cold.durationSec, // <-- BAGO: oras sa segundo
-      totalWords: cold.total,         // <-- BAGO: kabuuang salita
-      warmWCPM: warm ? warm.wcpm : null,
-      warmAccuracy: warm ? warm.accuracy : null,
-      comprehensionScore: compScore,
-      comprehensionTotal: state.current.questions.length,
-      timestamp: Date.now()
-    };
+  // Modal Container
+  const modalOverlay = document.createElement('div');
+  modalOverlay.id = 'feedbackModal';
+  modalOverlay.style.cssText = `display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; padding: 20px;`;
+  const modalBox = document.createElement('div');
+  modalBox.id = 'feedbackModalBox';
+  modalBox.style.cssText = `background: #fff; padding: 30px; border-radius: 16px; text-align: center; max-width: 500px; width: 100%; box-shadow: 0 10px 25px rgba(0,0,0,0.2); border-top: 8px solid #2e7d32;`;
+  modalOverlay.appendChild(modalBox);
+  document.body.appendChild(modalOverlay);
+}
 
-    await dbPut('sessions', session);
-    document.getElementById('status').textContent = `✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
-  };
+window.closeModal = function() {
+  document.getElementById('feedbackModal').style.display = 'none';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+};
 
-  // 2. I-update ang Dashboard para may Time (s) at Auto-Compute logic
-  window.renderDashboard = async function() {
-    const sessions = await dbGetAll('sessions');
-    const tbody = document.querySelector('#dashTable tbody');
-    tbody.innerHTML = '';
-    
-    // Bagong Table Headers (may Time (s) na)
-    const theadRow = document.querySelector('#dashTable thead tr');
-    theadRow.innerHTML = '<th>Learner</th><th>Attempt</th><th>Passage</th><th>Acc %</th><th>Time (s)</th><th>WCPM</th><th>Warm WCPM</th><th>Comp</th><th></th>';
-
-    document.getElementById('dashEmpty').classList.toggle('hidden', sessions.length > 0);
-
-    sessions.sort((a, b) => b.timestamp - a.timestamp).forEach(s => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td contenteditable="true" data-field="learner" style="font-weight:bold; color:#2e7d32;">${s.learner}</td>
-        <td style="text-align:center; background:#fff9c4;"><strong>#${s.attempt || 1}</strong></td>
-        <td>${s.title}</td>
-        <td contenteditable="true" data-field="coldAccuracy" style="background:#e3f2fd; font-weight:bold;">${s.coldAccuracy}</td>
-        <td contenteditable="true" data-field="coldDuration" style="background:#e3f2fd;">${s.coldDuration || 0}</td>
-        <td contenteditable="false" data-field="coldWCPM" style="background:#f5f5f5; font-weight:bold; color:#1565c0;">${s.coldWCPM}</td>
-        <td>${s.warmWCPM ?? '—'}</td>
-        <td contenteditable="true" data-field="comprehensionScore">${s.comprehensionScore}/${s.comprehensionTotal}</td>
-        <td><button class="btn ghost" style="padding:6px 10px" data-del="${s.id}">✕</button></td>
-      `;
-
-      // LOGIC: Kapag in-edit ang Accuracy o Time, auto-compute ang WCPM
-      tr.querySelectorAll('[contenteditable]').forEach(td => {
-        td.onblur = async () => {
-          const field = td.dataset.field;
-          let val = parseInt(td.textContent.trim()) || 0;
-          
-          if (field === 'comprehensionScore') {
-            const parts = td.textContent.split('/');
-            s.comprehensionScore = parseInt(parts[0]) || 0;
-          } else if (field === 'learner') {
-            s.learner = td.textContent.trim();
-          } else {
-            s[field] = val;
-          }
-
-          // AUTO-COMPUTE WCPM:
-          // Formula: (Accuracy% * Total Words) / 100 = Correct Words
-          // Correct Words / Time (seconds) * 60 = WCPM
-          if (field === 'coldAccuracy' || field === 'coldDuration') {
-            if (s.totalWords && s.coldDuration > 0) {
-              const correctWords = (s.coldAccuracy / 100) * s.totalWords;
-              s.coldWCPM = Math.round((correctWords / s.coldDuration) * 60);
-              
-              // I-update agad ang WCPM cell sa screen
-              const wcpmCell = tr.querySelector('[data-field="coldWCPM"]');
-              if (wcpmCell) wcpmCell.textContent = s.coldWCPM;
-            }
-          }
-
-          await dbPut('sessions', s);
-        };
-      });
-      
-      tr.querySelector('[data-del]').onclick = async () => {
-        await dbDelete('sessions', s.id);
-        renderDashboard();
-      };
-      tbody.appendChild(tr);
-    });
-    
-    // Recommendation Banner
-    if (sessions.length) {
-      const rec = recommendNext(sessions);
-      const oldBanner = document.getElementById('recBanner');
-      if (oldBanner) oldBanner.remove();
-      
-      const banner = document.createElement('div');
-      banner.id = 'recBanner';
-      banner.style.cssText = 'background:#e8f5e9;padding:12px;border-radius:10px;margin:12px 0;font-weight:600';
-      banner.textContent = rec.message;
-      document.querySelector('#dashView .card:last-child').prepend(banner);
-    }
-  };
-})();
-</script>
-</body>
-</html><script>
-// ==========================================
-// PATCH 4: FIX ENTER KEY & AUTO-COMPUTE
-// ==========================================
-(function() {
-  const originalRenderDashboard = window.renderDashboard;
-  
-  window.renderDashboard = async function() {
-    await originalRenderDashboard(); // Patakbuhin muna ang lumang dashboard
-    
-    const tbody = document.querySelector('#dashTable tbody');
-    const rows = tbody.querySelectorAll('tr');
-    
-    rows.forEach((tr, index) => {
-      tr.querySelectorAll('[contenteditable]').forEach(td => {
-        // Kapag pinindot ang Enter, i-blur (exit) ang cell para mag-save at mag-compute
-        td.onkeydown = (e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            td.blur();
-          }
-        };
-        
-        // Kapag umalis ang cursor (blur), dito natin kukunin ang value at i-compute
-        td.onblur = async () => {
-          const field = td.dataset.field;
-          const textVal = td.textContent.replace(/\s+/g, '').trim(); // Linisin ang spaces
-          
-          // Hanapin ang tamang session object sa database gamit ang index
-          const sessions = await dbGetAll('sessions');
-          sessions.sort((a, b) => b.timestamp - a.timestamp); // Parehas ng sort sa dashboard
-          const s = sessions[index];
-          if (!s) return;
-
-          if (field === 'comprehensionScore') {
-            const parts = td.textContent.split('/');
-            s.comprehensionScore = parseInt(parts[0].replace(/\D/g, '')) || 0;
-            td.textContent = s.comprehensionScore + '/' + s.comprehensionTotal;
-          } else if (field === 'learner') {
-            s.learner = td.textContent.trim();
-            td.textContent = s.learner;
-          } else {
-            s[field] = parseInt(textVal) || 0;
-            td.textContent = s[field]; // Ibinalik ang malinis na numero
-          }
-
-          // AUTO-COMPUTE WCPM
-          if (field === 'coldAccuracy' || field === 'coldDuration') {
-            if (s.totalWords && s.coldDuration > 0) {
-              const correctWords = (s.coldAccuracy / 100) * s.totalWords;
-              s.coldWCPM = Math.round((correctWords / s.coldDuration) * 60);
-              
-              // I-update agad ang WCPM cell sa screen
-              const wcpmCell = tr.querySelector('[data-field="coldWCPM"]');
-              if (wcpmCell) {
-                wcpmCell.textContent = s.coldWCPM;
-                // Mag-blink ang WCPM para malaman ng teacher na nag-compute
-                wcpmCell.style.backgroundColor = '#c8e6c9';
-                setTimeout(() => wcpmCell.style.backgroundColor = '#f5f5f5', 800);
-              }
-            }
-          }
-
-          await dbPut('sessions', s);
-        };
-      });
-    });
-  };
-})();
-</script>
-</body>
-</html><script>
-// ==========================================
-// PATCH 6: LIVE TIMER & PERFECT STOP LOGIC
-// ==========================================
-(function() {
-  // 1. Maglagay ng Live Timer sa screen
-  const statusP = document.getElementById('status');
-  const timerDisplay = document.createElement('span');
-  timerDisplay.id = 'liveTimer';
-  timerDisplay.style.cssText = 'font-weight: bold; color: #c62828; margin-left: 10px; font-size: 1.1rem; display: none;';
-  statusP.appendChild(timerDisplay);
-
-  let timerInterval = null;
-  let exactSeconds = 0;
-
-  function startLiveTimer() {
-    exactSeconds = 0;
-    timerDisplay.style.display = 'inline';
-    timerDisplay.textContent = '⏱️ 00:00';
-    timerInterval = setInterval(() => {
-      exactSeconds++;
-      const m = String(Math.floor(exactSeconds / 60)).padStart(2, '0');
-      const s = String(exactSeconds % 60).padStart(2, '0');
-      timerDisplay.textContent = `⏱️ ${m}:${s}`;
-    }, 1000);
-  }
-
-  function stopLiveTimer() {
-    clearInterval(timerInterval);
-    timerDisplay.style.display = 'none';
-    return exactSeconds;
-  }
-
-  // 2. I-override ang Start at Stop function
-  const originalStartReadNow = window.startReadNow;
-  window.startReadNow = function() {
-    startLiveTimer();
-    originalStartReadNow();
-  };
-
-  const originalFinishRead = window.finishRead;
-  window.finishRead = function(finalTranscript, duration) {
-    // Kunin ang eksaktong oras mula sa ating live timer, hindi sa browser
-    const exactTime = stopLiveTimer();
-    
-    // I-override ang duration na galing sa browser
-    originalFinishRead(finalTranscript, exactTime > 0 ? exactTime : duration);
-  };
-
-  // 3. SMART RECOVERY: Kung 0 ang narinig pero berde ang screen, ibalik ang record
-  const prevSaveSession = window.saveSession;
-  window.saveSession = async function(compScore) {
-    if (state.coldRead && state.coldRead.accuracy === 0) {
-      // Kung nag-0 ang cold read, tignan kung may warm read tayo na pwedeng kopyahin
-      if (state.warmRead && state.warmRead.accuracy > 0) {
-        state.coldRead = { ...state.warmRead };
-      } else {
-        // Kung talagang 0, ibigay natin ang minimum benefit of the doubt (e.g. 50% accuracy) para hindi maging 0 WCPM
-        const fallbackDuration = state.coldRead.durationSec || 30;
-        state.coldRead.accuracy = 50; 
-        state.coldRead.wcpm = Math.round(((50 / 100) * state.current.text.split(' ').length / fallbackDuration) * 60);
-      }
-    }
-
-    const allSessions = await dbGetAll('sessions');
-    const learnerSessions = allSessions.filter(s => s.learner === state.learnerName && s.passageId === state.current.id);
-    const attemptNum = learnerSessions.length + 1;
-    const cold = state.coldRead;
-    const warm = state.warmRead || null;
-
-    const session = {
-      learner: state.learnerName,
-      passageId: state.current.id,
-      title: state.current.title,
-      attempt: attemptNum,
-      stage: state.current.stage,
-      language: state.current.language,
-      coldWCPM: cold.wcpm,
-      coldAccuracy: cold.accuracy,
-      coldDuration: cold.durationSec,
-      totalWords: cold.total,
-      warmWCPM: warm ? warm.wcpm : null,
-      warmAccuracy: warm ? warm.accuracy : null,
-      warmDuration: warm ? warm.durationSec : null,
-      comprehensionScore: compScore,
-      comprehensionTotal: state.current.questions.length,
-      timestamp: Date.now()
-    };
-
-    await dbPut('sessions', session);
-    document.getElementById('status').textContent = `✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
-  };
-})();
-</script>
-</body>
-</html><script>
-// ==========================================
-// PATCH 7: THE FINAL TIMER & SAVE FIX
-// ==========================================
-(function() {
-  const statusP = document.getElementById('status');
-  
-  // 1. Gumawa ng bagong Timer element
-  const timerDisplay = document.createElement('span');
-  timerDisplay.id = 'liveTimerReal';
-  timerDisplay.style.cssText = 'font-weight: bold; color: #c62828; margin-left: 10px; font-size: 1.2rem; display: none; background: #ffebee; padding: 2px 8px; border-radius: 6px;';
-  statusP.appendChild(timerDisplay);
-
-  let timerInterval = null;
-  let exactSeconds = 0;
-
-  window.startLiveTimer = function() {
-    exactSeconds = 0;
-    timerDisplay.style.display = 'inline';
-    timerDisplay.textContent = '⏱️ 00:00';
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = setInterval(() => {
-      exactSeconds++;
-      const m = String(Math.floor(exactSeconds / 60)).padStart(2, '0');
-      const s = String(exactSeconds % 60).padStart(2, '0');
-      timerDisplay.textContent = `⏱️ ${m}:${s}`;
-    }, 1000);
-  };
-
-  window.stopLiveTimer = function() {
-    if (timerInterval) clearInterval(timerInterval);
-    timerDisplay.style.display = 'none';
-    return exactSeconds;
-  };
-
-  // 2. Override ang Read Now button para seryosohin ang timer
-  document.getElementById('btnRecord').onclick = () => {
-    if (asr.listening) {
-      asr.stop(); // Titigil ang mic
-    } else {
-      window.startLiveTimer(); // Sisimulan ang timer
-      startReadNow(); // Sisimulan ang mic
-    }
-  };
-
-  // 3. Override ang finishRead para gamitin ang Live Timer
-  const originalFinishRead = window.finishRead;
-  window.finishRead = function(finalTranscript, durationFromBrowser) {
-    const exactTime = window.stopLiveTimer(); // Kunin ang exact seconds
-    
-    // Ipasa sa original function ang tamang oras
-    originalFinishRead(finalTranscript, exactTime > 0 ? exactTime : durationFromBrowser);
-  };
-
-  // 4. I-override ang Save Session para siguradong may totalWords at duration
-  window.saveSession = async function(compScore) {
-    const allSessions = await dbGetAll('sessions');
-    const learnerSessions = allSessions.filter(s => s.learner === state.learnerName && s.passageId === state.current.id);
-    const attemptNum = learnerSessions.length + 1;
-    const cold = state.coldRead || {wcpm:0,accuracy:0,durationSec:0,total:0};
-    const warm = state.warmRead || null;
-
-    const session = {
-      learner: state.learnerName,
-      passageId: state.current.id,
-      title: state.current.title,
-      attempt: attemptNum,
-      stage: state.current.stage,
-      language: state.current.language,
-      coldWCPM: cold.wcpm,
-      coldAccuracy: cold.accuracy,
-      coldDuration: cold.durationSec,
-      totalWords: cold.total || state.current.text.split(' ').length, // Fallback
-      warmWCPM: warm ? warm.wcpm : null,
-      warmAccuracy: warm ? warm.accuracy : null,
-      warmDuration: warm ? warm.durationSec : null,
-      comprehensionScore: compScore,
-      comprehensionTotal: state.current.questions.length,
-      timestamp: Date.now()
-    };
-
-    await dbPut('sessions', session);
-    document.getElementById('status').textContent = `✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
-  };
-})();
-</script>
-</body>
-</html><script>
-// ==========================================
-// PATCH 8: TIMER ON BUTTON & MASTERY STAGE JUMP
-// ==========================================
-(function() {
-  const btnRecord = document.getElementById('btnRecord');
-  let timerInterval = null;
-  let exactSeconds = 0;
-
-  // 1. LIVE TIMER SA LOOB NG BUTTON
-  const originalOnClick = btnRecord.onclick;
-  btnRecord.onclick = function(e) {
-    if (asr.listening) {
-      // KAPAG TINAPOS (STOP)
-      if (timerInterval) clearInterval(timerInterval);
-      btnRecord.innerHTML = '🎤 Read Now';
-      if (originalOnClick) originalOnClick.call(this, e);
-    } else {
-      // KAPAG NAGSIMULA (START)
-      exactSeconds = 0;
-      btnRecord.innerHTML = '⏹ Stop Reading (⏱️ 00:00)';
-      if (timerInterval) clearInterval(timerInterval);
-      timerInterval = setInterval(() => {
-        exactSeconds++;
-        const m = String(Math.floor(exactSeconds / 60)).padStart(2, '0');
-        const s = String(exactSeconds % 60).padStart(2, '0');
-        btnRecord.innerHTML = `⏹ Stop Reading (⏱️ ${m}:${s})`;
-      }, 1000);
-      
-      if (originalOnClick) originalOnClick.call(this, e);
-    }
-  };
-
-  // I-override ang finishRead para gamitin ang exactSeconds
-  const originalFinishRead = window.finishRead;
-  window.finishRead = function(finalTranscript, durationFromBrowser) {
-    if (timerInterval) clearInterval(timerInterval);
-    originalFinishRead(finalTranscript, exactSeconds > 0 ? exactSeconds : durationFromBrowser);
-  };
-
-  // 2. MAS MADALING STAGE PROGRESSION (MASTERY)
-  window.recommendNext = function(sessions) {
-    if (!sessions.length) return { stage: 1, message: 'Start at Stage 1.' };
-    const sorted = sessions.slice().sort((a, b) => b.timestamp - a.timestamp);
-    const currentStage = sorted[0].stage;
-    
-    // Kunin ang pinakahuling attempt
-    const latest = sorted[0];
-    
-    // RULE: Kung 100% Accuracy, 5/5 Comp, at 60+ WCPM, ia-advance agad!
-    const isMastery = latest.coldAccuracy >= 95 && latest.comprehensionScore >= 4 && latest.coldWCPM >= 60;
-
-    if (isMastery && currentStage < 3) {
-      return { stage: currentStage + 1, message: `🎉 Napakagaling! Mastery level. Ready for Stage ${currentStage + 1}!` };
-    }
-    
-    // Kung hindi mastery, kailangan ng 2 sunod-sunod na pass gaya ng dati
-    const sameStage = sorted.filter(s => s.stage === currentStage).slice(0, 2);
-    const passing = sameStage.length === 2 && sameStage.every(s => 
-      Math.max(s.coldAccuracy, s.warmAccuracy || 0) >= 90 && 
-      Math.max(s.coldWCPM, s.warmWCPM || 0) >= 60 && 
-      s.comprehensionScore >= 4
-    );
-    
-    if (passing && currentStage < 3) {
-      return { stage: currentStage + 1, message: `🎉 Ready for Stage ${currentStage + 1}!` };
-    }
-    
-    return { stage: currentStage, message: 'Keep practicing at this stage.' };
-  };
-})();
-</script>
-</body>
-</html><script>
-// ==========================================
-// PATCH 9: LEARNER FEEDBACK & STAGE UNLOCK
-// ==========================================
-(function() {
-  
-  // 1. Alisin ang banner sa Teacher Dashboard (para malinis)
-  const originalRenderDashboard = window.renderDashboard;
-  window.renderDashboard = async function() {
-    await originalRenderDashboard();
-    const oldBanner = document.getElementById('recBanner');
-    if (oldBanner) oldBanner.remove(); // Burahin ang banner sa dashboard
-  };
-
-  // 2. Maglagay ng Feedback Box sa Home (Learner View)
-  const quizCard = document.getElementById('quizCard');
-  const feedbackBox = document.createElement('div');
-  feedbackBox.id = 'learnerFeedback';
-  feedbackBox.className = 'card';
-  feedbackBox.style.cssText = 'display: none; border-left: 6px solid #2e7d32; background: #e8f5e9; margin-top: 20px; text-align: center;';
-  quizCard.parentNode.insertBefore(feedbackBox, quizCard.nextSibling);
-
-  // 3. Override ang pag-save para magpakita ng feedback at Stage Unlock button
-  const originalSaveSession = window.saveSession;
-  window.saveSession = async function(compScore) {
-    await originalSaveSession(compScore); // I-save muna sa database
-
-    const sessions = await dbGetAll('sessions');
-    const rec = window.recommendNext(sessions);
-    const isMastery = rec.message.includes('Mastery') || rec.message.includes('Ready');
-
-    // Ipakita ang Feedback Box
-    feedbackBox.style.display = 'block';
-    
-    let html = `
-      <h3 style="margin-top:0; color:#2e7d32;">🎉 Tapos na ang pagbasa mo, ${state.learnerName}!</h3>
-      <p>Score sa Quiz: <strong>${compScore} / ${state.current.questions.length}</strong></p>
-    `;
-
-    if (isMastery) {
-      html += `
-        <p style="font-size: 1.2rem; font-weight: bold; color: #1565c0;">Napakagaling! Handa ka na para sa susunod na antas!</p>
-        <button class="btn" onclick="window.goToNextStage()" style="background: #f9a825; font-size: 1.2rem; padding: 15px 30px; margin-top: 10px; width: 100%;">
-          🚀 Magpatuloy sa Stage ${rec.stage}
-        </button>
-      `;
-    } else {
-      html += `
-        <p>Keep practicing! Basahin muli ang kwento para mas bumilis ka.</p>
-        <button class="btn secondary" onclick="window.closeFeedback()" style="margin-top: 10px;">Okay, naintindihan ko</button>
-      `;
-    }
-
-    feedbackBox.innerHTML = html;
-    feedbackBox.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  // 4. Function para isara ang feedback
-  window.closeFeedback = function() {
-    feedbackBox.style.display = 'none';
-    // I-reset ang view para sa susunod na bata
-    document.getElementById('passageSelect').selectedIndex = 0;
-    if(typeof buildPassageSelect === 'function') buildPassageSelect(); // I-reset sa Stage 1 unang kwento
-    document.getElementById('learnerNameInput').value = '';
-    state.learnerName = 'Learner';
-    document.getElementById('status').textContent = 'Tap "Play Model Read" to hear the passage, then "Read Now".';
-  };
-
-  // 5. Function para pumunta sa susunod na Stage
-  window.goToNextStage = function() {
-    const sessions = await dbGetAll('sessions');
-    const rec = window.recommendNext(sessions);
+window.goToNextStageModal = function() {
+  document.getElementById('feedbackModal').style.display = 'none';
+  dbGetAll('sessions').then(all => {
+    const rec = recommendNext(all);
     const targetStage = rec.stage;
-    
-    feedbackBox.style.display = 'none';
-    
-    // Hanapin ang unang kwento sa susunod na stage
     const nextPassage = state.passages.find(p => p.stage === targetStage && p.language === state.lang);
     
     if (nextPassage) {
-      // I-update ang dropdown at i-load ang bagong kwento
       document.getElementById('passageSelect').value = nextPassage.id;
       loadPassage(nextPassage.id);
-      
-      // I-maintain ang pangalan ng bata
-      document.getElementById('learnerNameInput').value = state.learnerName;
+      document.getElementById('learnerNameInput').value = state.learnerName; 
       document.getElementById('status').textContent = `Welcome to Stage ${targetStage}! Tap "Play Model Read" to start.`;
-      
-      // Scroll pataas
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  };
-})();
-</script>
-</body>
-</html><script>
-// ==========================================
-// PATCH 11: THE ULTIMATE POP-UP FIX
-// ==========================================
-(function() {
-  // 1. Gumawa ng Modal Container sa HTML
-  const modalOverlay = document.createElement('div');
-  modalOverlay.id = 'feedbackModal';
-  modalOverlay.style.cssText = `
-    display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; padding: 20px;
-  `;
-  
-  const modalBox = document.createElement('div');
-  modalBox.id = 'feedbackModalBox';
-  modalBox.style.cssText = `
-    background: #fff; padding: 30px; border-radius: 16px; text-align: center; max-width: 500px; width: 100%;
-    box-shadow: 0 10px 25px rgba(0,0,0,0.2); border-top: 8px solid #2e7d32;
-  `;
-  modalOverlay.appendChild(modalBox);
-  document.body.appendChild(modalOverlay);
+  });
+};
 
-  // 2. I-override nang tuluyan ang submitQuiz function (hindi na saveSession)
-  const originalSubmitQuiz = window.submitQuiz;
-  window.submitQuiz = async function() {
-    // Patakbuhin ang lumang submitQuiz para mag-compute ng score
-    if (originalSubmitQuiz) {
-      await originalSubmitQuiz(); 
-    }
-
-    // KUNG TAPOS NA ANG PAG-SAVE, DITO NATIN IPAKIKITA ANG MODAL
-    // Kunin ang pinakabagong record ng bata para malaman kung pumasa
-    setTimeout(async () => {
-      const sessions = await dbGetAll('sessions');
-      const rec = window.recommendNext(sessions);
-      const isMastery = rec.message.includes('Mastery') || rec.message.includes('Ready');
-      
-      // Kunin ang score sa screen
-      const scoreText = document.getElementById('statComp').textContent;
-      const currentScore = scoreText !== '—' ? scoreText : 'Tapos';
-
-      let modalHTML = '';
-      
-      if (isMastery) {
-        modalHTML = `
-          <h1 style="color: #2e7d32; font-size: 3rem; margin: 0 0 10px 0;">🌟</h1>
-          <h2 style="color: #2e7d32; margin-top: 0;">Napakagaling, ${state.learnerName}!</h2>
-          <p style="font-size: 1.2rem; color: #333;">Nakuha mo ang <strong>${currentScore}</strong> sa quiz at umabot ka sa target na bilis!</p>
-          <p style="font-size: 1.1rem; color: #1565c0; font-weight: bold; margin-bottom: 20px;">Handa ka na para sa susunod na antas!</p>
-          <button class="btn" onclick="window.goToNextStageModal()" style="background: #f9a825; font-size: 1.2rem; width: 100%; padding: 15px;">
-            🚀 Magpatuloy sa Stage ${rec.stage}
-          </button>
-        `;
-      } else {
-        modalHTML = `
-          <h1 style="color: #1565c0; font-size: 3rem; margin: 0 0 10px 0;">💪</h1>
-          <h2 style="color: #1565c0; margin-top: 0;">Magaling, ${state.learnerName}!</h2>
-          <p style="font-size: 1.1rem; color: #333;">Nakuha mo ang <strong>${currentScore}</strong> sa quiz.</p>
-          <p style="font-size: 1rem; color: #666; margin-bottom: 20px;">Kailangan pa natin ng kaunting practice para mas bumilis at tumaas ang WCPM. Pwede mo subukan muli ang kwento!</p>
-          <button class="btn secondary" onclick="window.closeModal()" style="width: 100%; padding: 15px;">
-            Okay, naintindihan ko!
-          </button>
-        `;
-      }
-
-      document.getElementById('feedbackModalBox').innerHTML = modalHTML;
-      document.getElementById('feedbackModal').style.display = 'flex';
-    }, 500); // 500ms delay para matapos muna ang save
-  };
-
-  // 3. Function para isara ang Modal
-  window.closeModal = function() {
-    document.getElementById('feedbackModal').style.display = 'none';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  // 4. Function para lumipat ng Stage
-  window.goToNextStageModal = function() {
-    document.getElementById('feedbackModal').style.display = 'none';
-    
-    dbGetAll('sessions').then(all => {
-      const rec = window.recommendNext(all);
-      const targetStage = rec.stage;
-      const nextPassage = state.passages.find(p => p.stage === targetStage && p.language === state.lang);
-      
-      if (nextPassage) {
-        document.getElementById('passageSelect').value = nextPassage.id;
-        loadPassage(nextPassage.id);
-        document.getElementById('learnerNameInput').value = state.learnerName; 
-        document.getElementById('status').textContent = `Welcome to Stage ${targetStage}! Tap "Play Model Read" to start.`;
-        window.scrollTo({ top: 0, behavior: 'smooth' });
-      }
-    });
-  };
-})();
-</script>
-<script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js');
-  }
-</script>
-<script>
-// ==========================================
-<script>
-// ==========================================
-// PATCH 17: FINAL GOOGLE SHEETS SYNC
-// ==========================================
-(function() {
-  // PALITAN ITO NG URL MULA SA APPS SCRIPT MO
+window.fetchCloud = async function() {
+  const cloudBtn = document.getElementById('cloudFetchBtn');
+  cloudBtn.innerHTML = '⏳ Fetching...';
   const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycBxtuixFib7LTRtJAfIgsQ0t8VVvuWL_BEGEBnFLdSfycarT0yCRfxy_8adB8WQUcalDZQ/exec";
-
-  // 1. MAGPADALA NG DATA SA GOOGLE SHEETS
-  const prevSaveSession = window.saveSession;
-  window.saveSession = async function(compScore) {
-    await prevSaveSession(compScore);
-    try {
-      const sessions = await dbGetAll('sessions');
-      sessions.sort((a, b) => b.timestamp - a.timestamp);
-      const latest = sessions[0];
-      if (!latest) return;
-
-      const payload = {
-        learner: latest.learner,
-        passage: latest.title,
-        attempt: latest.attempt,
-        wcpm: latest.coldWCPM,
-        accuracy: latest.coldAccuracy,
-        time: latest.coldDuration,
-        comprehension: latest.comprehensionScore + "/" + latest.comprehensionTotal
-      };
-      
-      // Gagamit tayo ng URLSearchParams para i-bypass ang CORS
-      const queryString = new URLSearchParams(payload).toString();
-      await fetch(GOOGLE_SCRIPT_URL + "?" + queryString, {
-        method: 'GET', mode: 'no-cors'
-      });
-    } catch (e) { 
-      console.log("Sync error:", e); 
-    }
-  };
-
-  // 2. FETCH BUTTON PARA SA DASHBOARD
-  if (document.getElementById('cloudFetchBtn')) return;
-
-  const dashCard = document.querySelector('#dashView .card');
-  const cloudBtn = document.createElement('button');
-  cloudBtn.id = 'cloudFetchBtn';
-  cloudBtn.className = 'btn secondary';
-  cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
-  cloudBtn.style.marginTop = '10px';
-  cloudBtn.style.width = '100%';
   
-  cloudBtn.onclick = async () => {
-    cloudBtn.innerHTML = '⏳ Fetching...';
-    try {
-      const res = await fetch(GOOGLE_SCRIPT_URL);
-      const cloudData = await res.json();
-      
-      if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
-        const tbody = document.querySelector('#dashTable tbody');
-        tbody.innerHTML = '';
-        cloudData.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).forEach(s => {
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td style="font-weight:bold; color:#2e7d32;">${s.learner}</td>
-            <td style="text-align:center; background:#fff9c4;"><strong>#${s.attempt}</strong></td>
-            <td>${s.title}</td>
-            <td contenteditable="false">${s.coldAccuracy}</td>
-            <td contenteditable="false">${s.coldDuration}</td>
-            <td style="font-weight:bold; color:#1565c0;">${s.coldWCPM}</td>
-            <td>—</td>
-            <td>${s.comprehensionScore}/5</td>
-            <td>☁️</td>
-          `;
-          tbody.appendChild(tr);
-        });
-        alert("✅ Successfully fetched cloud records!");
-      } else {
-        alert("ℹ️ Walang record na nakuha. Magbasa muna ang isang bata.");
-      }
-    } catch (e) {
-      console.error(e);
-      alert("⚠️ Error sa internet o CORS. I-check kung 'Anyone' ang access sa Apps Script.");
+  try {
+    const res = await fetch(GOOGLE_SCRIPT_URL);
+    const cloudData = await res.json();
+    
+    if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
+      const tbody = document.querySelector('#dashTable tbody');
+      tbody.innerHTML = '';
+      cloudData.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).forEach(s => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td style="font-weight:bold; color:#2e7d32;">${s.learner}</td>
+          <td style="text-align:center; background:#fff9c4;"><strong>#${s.attempt}</strong></td>
+          <td>${s.title}</td>
+          <td contenteditable="false">${s.coldAccuracy}</td>
+          <td contenteditable="false">${s.coldDuration}</td>
+          <td style="font-weight:bold; color:#1565c0;">${s.coldWCPM}</td>
+          <td>—</td>
+          <td>${s.comprehensionScore}/5</td>
+          <td>☁️</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      alert("✅ Successfully fetched cloud records!");
+    } else {
+      alert("ℹ️ Walang record na nakuha. Magbasa muna ang isang bata.");
     }
-    cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
-  };
-  dashCard.appendChild(cloudBtn);
-})();
+  } catch (e) {
+    console.error(e);
+    alert("⚠️ Error sa internet o CORS. I-check kung 'Anyone' ang access sa Apps Script.");
+  }
+  cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
+};
 </script>
 </body>
 </html>
