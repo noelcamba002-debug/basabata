@@ -1429,7 +1429,7 @@ function bindUI(){
   cloudBtn.onclick = async () => {
     cloudBtn.innerHTML = '⏳ Fetching...';
     try {
-      const res = await fetch(GOOGLE_SCRIPT_URL);
+      const res = await fetch(GOOGLE_SCRIPT_URL + "?callback=myCallback");
       const cloudData = await res.json();
       if(cloudData && cloudData.length > 0) {
         const tbody = document.querySelector('#dashTable tbody');
@@ -1461,8 +1461,9 @@ function bindUI(){
 })();
 </script>
 <script>
+<script>
 // ==========================================
-// PATCH 15: FIX CLOUD FETCH ERROR & LAYOUT
+// PATCH 16: FINAL CLOUD FETCH FIX
 // ==========================================
 (function() {
   const cloudBtns = document.querySelectorAll('.btn.secondary');
@@ -1470,7 +1471,6 @@ function bindUI(){
   cloudBtns.forEach(btn => {
     if (btn.innerHTML.includes('Fetch Cloud')) {
       cloudBtn = btn;
-      // Ayusin ang layout
       btn.style.marginLeft = '0';
       btn.style.marginTop = '10px';
       btn.style.width = '100%';
@@ -1479,17 +1479,22 @@ function bindUI(){
 
   if (!cloudBtn) return;
 
-  // Palitan ang function ng cloudBtn
   cloudBtn.onclick = async () => {
     cloudBtn.innerHTML = '⏳ Fetching...';
-    // Kunin ang URL mula sa naunang script
-    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycBxtuixFib7LTRtJAfIgsQ0t8VVvuWL_BEGEBnFLdSfycarT0yCRfxy_8adB8WQUcalDZQ/exec";
+    // Idinagdag natin ang ?callback=myCallback sa dulo ng URL para ma-bypass ang CORS
+    const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycBxtuixFib7LTRtJAfIgsQ0t8VVvuWL_BEGEBnFLdSfycarT0yCRfxy_8adB8WQUcalDZQ/exec?callback=myCallback";
 
     try {
       const res = await fetch(GOOGLE_SCRIPT_URL);
-      const cloudData = await res.json();
+      const text = await res.text(); // Kunin muna as text dahil naka-JSONP wrapper
       
-      // MAS MATALINONG CHECK: Kung array at may laman
+      // Linisin ang JSONP wrapper para makuha ang totoong JSON
+      const jsonStart = text.indexOf('(') + 1;
+      const jsonEnd = text.lastIndexOf(')');
+      const jsonString = text.substring(jsonStart, jsonEnd);
+      
+      const cloudData = JSON.parse(jsonString);
+      
       if (cloudData && Array.isArray(cloudData) && cloudData.length > 0) {
         const tbody = document.querySelector('#dashTable tbody');
         tbody.innerHTML = '';
@@ -1514,11 +1519,10 @@ function bindUI(){
         alert("ℹ️ Walang record na nakuha. Magbasa muna ang isang bata at i-submit ang quiz para may maitala.");
       }
     } catch (e) {
-      alert("⚠️ Error sa internet connection. Siguraduhing naka-konekta ka sa WiFi.");
+      console.error(e);
+      alert("⚠️ Error sa internet connection o hindi pa naka-deploy nang tama ang Apps Script. Check your setup.");
     }
     cloudBtn.innerHTML = '☁️ Fetch Cloud Records';
   };
 })();
 </script>
-</body>
-</html>
