@@ -620,32 +620,36 @@ function bindUI(){
   });
 
   // 2. I-override ang saveSession para maisama ang Attempt Number
-  const originalSaveSession = saveSession;
+    const prevSaveSession = window.saveSession;
   window.saveSession = async function(compScore) {
-    // Kunin lahat ng sessions para malaman kung pang-ilan na ito
-    const allSessions = await dbGetAll('sessions');
-    const learnerSessions = allSessions.filter(s => s.learner === state.learnerName && s.passageId === state.current.id);
-    const attemptNum = learnerSessions.length + 1;
+    await prevSaveSession(compScore);
+    
+    try {
+      const sessions = await dbGetAll('sessions');
+      sessions.sort((a, b) => b.timestamp - a.timestamp);
+      const latest = sessions[0];
+      if (!latest) return;
 
-    const cold = state.coldRead || {wcpm:0,accuracy:0,durationSec:0};
-    const warm = state.warmRead || null;
-
-    const session = {
-      learner: state.learnerName,
-      passageId: state.current.id,
-      title: state.current.title,
-      attempt: attemptNum, // Ito ang bago (1st, 2nd, 3rd...)
-      stage: state.current.stage,
-      language: state.current.language,
-      coldWCPM: cold.wcpm,
-      coldAccuracy: cold.accuracy,
-      warmWCPM: warm ? warm.wcpm : null,
-      warmAccuracy: warm ? warm.accuracy : null,
-      comprehensionScore: compScore,
-      comprehensionTotal: state.current.questions.length,
-      timestamp: Date.now()
-    };
-
+      // Gagamit tayo ng Form Data (URLSearchParams) imbes na JSON
+      const formData = new URLSearchParams();
+      formData.append('learner', latest.learner);
+      formData.append('passage', latest.title);
+      formData.append('attempt', latest.attempt);
+      formData.append('wcpm', latest.coldWCPM);
+      formData.append('accuracy', latest.coldAccuracy);
+      formData.append('time', latest.coldDuration);
+      formData.append('comprehension', latest.comprehensionScore + "/" + latest.comprehensionTotal);
+      
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: 'POST', 
+        mode: 'no-cors', 
+        body: formData // Hindi na JSON, formData na
+      });
+      console.log("Data sent to Google Sheets!");
+    } catch (e) { 
+      console.log("Error sending to Google Sheets:", e); 
+    }
+  };
     await dbPut('sessions', session);
     document.getElementById('status').textContent = `✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
   };
