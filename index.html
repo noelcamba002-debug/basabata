@@ -78,10 +78,11 @@ th{background:#f5f5f5}
     </div>
 
     <div class="card" id="nameCard">
-      <!-- Name Input dito ilalagay ng JS -->
+      <label for="learnerNameInput" style="font-weight: bold; color: #1565c0;">👦 Pangalan ng Bata:</label>
+      <input type="text" id="learnerNameInput" placeholder="I-type ang pangalan dito..." style="width: 100%; margin-top: 8px; padding: 10px; border: 2px solid #1565c0; border-radius: 6px; font-size: 1rem;" />
     </div>
 
-    <div class="card" id="passageCard">
+    <div class="card">
       <div id="passageText"></div>
       <div class="controls">
         <button class="btn" id="btnPlay">🔊 Play Model Read</button>
@@ -191,7 +192,6 @@ function dbClear(s){return new Promise((res,rej)=>{const t=db.transaction(s,'rea
 function dbDelete(s,id){return new Promise((res,rej)=>{const t=db.transaction(s,'readwrite'),r=t.objectStore(s).delete(id);r.onsuccess=()=>res();r.onerror=()=>rej(r.error)})}
 
 const state={passages:PASSAGES.slice(),current:null,lang:'en',fontSize:1,dyslexic:false,highContrast:false,learnerName:'Learner',coldRead:null,warmRead:null,quizAnswers:[],wordEls:[],passageWords:[],lastAlignment:null};
-
 let timerInterval = null;
 let exactSeconds = 0;
 let isTimerRunning = false;
@@ -199,7 +199,6 @@ let isTimerRunning = false;
 (async function init(){
   try{await openDB()}catch(e){console.warn('DB unavailable',e)}
   await restoreSettings();
-  buildNameInput(); // Inilipat sa labas para malinis
   buildPassageSelect();
   bindUI();
   populateVoices();
@@ -216,20 +215,6 @@ function applyVisualSettings(){
   document.body.classList.toggle('dyslexic',state.dyslexic);
   document.body.classList.toggle('high-contrast',state.highContrast);
   document.getElementById('btnLang').textContent=state.lang.toUpperCase();
-}
-
-function buildNameInput() {
-  const nameDiv = document.getElementById('nameCard');
-  nameDiv.innerHTML = `
-    <label for="learnerNameInput" style="font-weight: bold; color: #1565c0;">👦 Pangalan ng Bata:</label>
-    <input type="text" id="learnerNameInput" placeholder="I-type ang pangalan dito..." style="flex: 1; min-width: 200px; padding: 10px; border: 2px solid #1565c0; border-radius: 6px; font-size: 1rem; width: 100%; margin-top: 10px;" />
-  `;
-  const nameInput = document.getElementById('learnerNameInput');
-  nameInput.value = state.learnerName === 'Learner' ? '' : state.learnerName;
-  nameInput.addEventListener('input', (e) => {
-    state.learnerName = e.target.value.trim() || 'Learner';
-    saveSetting('learnerName', state.learnerName);
-  });
 }
 
 function buildPassageSelect(){
@@ -512,36 +497,36 @@ function submitQuiz(){
 }
 
 async function saveSession(compScore){
-  // Kunin ang tamang data mula sa screen (hindi na sa lumang timer)
-  const coldWCPM = parseInt(document.getElementById('statWCPM').textContent) || 0;
-  const coldAcc = parseInt(document.getElementById('statAcc').textContent) || 0;
-  const coldTime = parseInt(document.getElementById('statTime').textContent) || 0;
+  // Kukunin natin ang eksaktong numero na nakalagay sa screen ng Session Results
+  const screenWCPM = parseInt(document.getElementById('statWCPM').textContent) || 0;
+  const screenAcc = parseInt(document.getElementById('statAcc').textContent) || 0;
+  const screenTime = parseInt(document.getElementById('statTime').textContent) || 0;
   
   const allSessions = await dbGetAll('sessions');
   const learnerSessions = allSessions.filter(s => s.learner === state.learnerName && s.passageId === state.current.id);
   const attemptNum = learnerSessions.length + 1;
 
-  const session={
-    learner:state.learnerName,
-    passageId:state.current.id,
-    title:state.current.title,
-    attempt:attemptNum,
-    stage:state.current.stage,
-    language:state.current.language,
-    coldWCPM: coldWCPM,
-    coldAccuracy: coldAcc,
-    coldDuration: coldTime,
+  const session = {
+    learner: state.learnerName,
+    passageId: state.current.id,
+    title: state.current.title,
+    attempt: attemptNum,
+    stage: state.current.stage,
+    language: state.current.language,
+    coldWCPM: screenWCPM,
+    coldAccuracy: screenAcc,
+    coldDuration: screenTime,
     totalWords: state.current.text.split(' ').length,
     warmWCPM: state.warmRead ? state.warmRead.wcpm : null,
     warmAccuracy: state.warmRead ? state.warmRead.accuracy : null,
     warmDuration: state.warmRead ? state.warmRead.durationSec : null,
-    comprehensionScore:compScore,
-    comprehensionTotal:state.current.questions.length,
-    timestamp:Date.now()
+    comprehensionScore: compScore,
+    comprehensionTotal: state.current.questions.length,
+    timestamp: Date.now()
   };
   
-  await dbPut('sessions',session);
-  document.getElementById('status').textContent=`✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
+  await dbPut('sessions', session);
+  document.getElementById('status').textContent = `✅ Naitala! (Attempt #${attemptNum} para kay ${state.learnerName})`;
 
   // GOOGLE SHEETS SYNC
   try {
@@ -559,9 +544,9 @@ async function saveSession(compScore){
     await fetch(GOOGLE_SCRIPT_URL + "?" + queryString, {
       method: 'GET', mode: 'no-cors'
     });
-    console.log("Sync success");
   } catch (e) { console.log("Sync error:", e); }
 }
+
 function recommendNext(sessions){
   if(!sessions.length)return{stage:1,message:'Start at Stage 1.'};
   const sorted=sessions.slice().sort((a,b)=>b.timestamp-a.timestamp);
@@ -738,6 +723,14 @@ function bindUI(){
     document.getElementById('dashView').classList.add('hidden');
     document.getElementById('learnerView').classList.remove('hidden');
   };
+
+  // Pangalan ng Bata Input
+  const nameInput = document.getElementById('learnerNameInput');
+  nameInput.value = state.learnerName === 'Learner' ? '' : state.learnerName;
+  nameInput.addEventListener('input', (e) => {
+    state.learnerName = e.target.value.trim() || 'Learner';
+    saveSetting('learnerName', state.learnerName);
+  });
 
   // Modal Container
   const modalOverlay = document.createElement('div');
